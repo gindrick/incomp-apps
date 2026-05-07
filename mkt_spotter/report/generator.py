@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from scraper.base import Post, ProfileResult
 
@@ -40,7 +40,7 @@ def save_run(
     os.makedirs(run_dir, exist_ok=True)
 
     data = {
-        "run_at": datetime.utcnow().isoformat(),
+        "run_at": datetime.now(timezone.utc).isoformat(),
         "profiles": [
             _profile_to_dict(r, messages.get(r.profile, []))
             for r in results

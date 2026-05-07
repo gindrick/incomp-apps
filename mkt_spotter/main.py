@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import yaml
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 from report.generator import save_run
 from scraper.analyzer import analyze_main_message
-from scraper.base import ProfileResult, ScraperBase
+from scraper.base import Post, ProfileResult, ScraperBase
 from scraper.facebook import FacebookScraper
 from scraper.instagram import InstagramScraper
 from scraper.linkedin import LinkedInScraper
@@ -32,6 +33,96 @@ PLATFORM_SCRAPERS: dict[str, type[ScraperBase]] = {
     "linkedin.com": LinkedInScraper,
 }
 
+SAMPLE_POSTS: dict[str, list[dict]] = {
+    "facebook": [
+        {"text": "We are thrilled to present our latest hinge collection at LIGNA trade fair in Hannover! Stop by Hall 12, Stand B42. #LIGNA2025 #Innovation", "reactions": 184, "comments": 16},
+        {"text": "Our new push-to-open drawer systems are now available across Europe. Smooth, silent, and built to last. Request your catalogue today.", "reactions": 97, "comments": 8},
+        {"text": "Fast delivery guaranteed — 98% of orders shipped within 24 hours. Your projects deserve reliable partners.", "reactions": 143, "comments": 21},
+        {"text": "Behind every great kitchen is great hardware. See our full portfolio at hettich.com", "reactions": 76, "comments": 5},
+    ],
+    "instagram": [
+        {"text": "Design meets function ✨ Our concealed hinge series — now in brushed gold finish. #InteriorDesign #Hardware #Hettich", "reactions": 312, "comments": 8},
+        {"text": "Swipe to see the full transformation. Soft-close technology for every cabinet door. 🚪 #HomeDesign", "reactions": 278, "comments": 14},
+        {"text": "Sustainability is in our DNA. 85% of our packaging is now recyclable. #GreenManufacturing", "reactions": 201, "comments": 6},
+    ],
+    "linkedin": [
+        {"text": "We are proud to announce that Henkel has been recognized as a Top Employer 2025 in 16 countries. This achievement reflects our commitment to creating an inclusive and innovative workplace.", "reactions": 97, "comments": 22},
+        {"text": "Innovation spotlight: Our new bio-based adhesive reduces CO₂ emissions by up to 40% compared to conventional alternatives. A milestone for sustainable manufacturing.", "reactions": 134, "comments": 31},
+        {"text": "Meet Jana, Senior R&D Engineer at Henkel. 'What I love most is that my work directly impacts products used by millions of people every day.' #LifeAtHenkel #Careers", "reactions": 88, "comments": 17},
+        {"text": "Henkel's Q1 2025 results: organic sales growth of 3.2%, driven by strong performance in Adhesive Technologies. Full report available on our investor relations page.", "reactions": 62, "comments": 9},
+        {"text": "Proud to support STEM education initiatives across Central Europe. Last year we reached over 12,000 students through our Science for a Better World programme.", "reactions": 115, "comments": 28},
+    ],
+}
+
+SAMPLE_MESSAGES: dict[str, list[str]] = {
+    "HettichCR":    ["product innovation", "fast delivery", "trade fair presence", "portfolio breadth"],
+    "Hafele":       ["smart home integration", "design quality", "service network"],
+    "rudolfostermann_karriere": ["employer branding", "career opportunities", "team culture"],
+    "hettich_official":        ["design aesthetics", "sustainability", "product launches"],
+    "henkel":       ["company culture", "innovation", "sustainability", "financial results"],
+    "moderne-kunststoff-technik-gebruder-eschbach-gmbh": ["precision manufacturing", "B2B partnerships", "technical expertise"],
+}
+
+
+def _make_sample_post(platform: str, profile: str, idx: int, data: dict) -> Post:
+    return Post(
+        platform=platform,
+        profile=profile,
+        url=f"https://www.{platform}.com/{profile}/posts/{1000 + idx}",
+        published_at=datetime.now(timezone.utc) - timedelta(days=idx + 1),
+        text=data["text"],
+        reactions=data["reactions"],
+        comments=data["comments"],
+        shares=0,
+        screenshot_path="",
+    )
+
+
+def dry_run(config: dict) -> None:
+    output_dir: str = config.get("output_dir", "reports")
+    profiles: list[dict] = config.get("profiles", [])
+
+    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M") + "_dry"
+    run_dir = os.path.join(output_dir, run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    logger.info("DRY RUN — generating sample data for %d profiles (no browser, no credentials)", len(profiles))
+
+    results: list[ProfileResult] = []
+
+    for entry in profiles:
+        url = entry["url"]
+        label = entry.get("label", url)
+        cls = next((c for d, c in PLATFORM_SCRAPERS.items() if d in url), None)
+        if cls is None:
+            continue
+
+        platform = cls.PLATFORM
+        profile_name = url.rstrip("/").split("/")[-1]
+        sample_pool = SAMPLE_POSTS.get(platform, SAMPLE_POSTS["linkedin"])
+
+        posts = [
+            _make_sample_post(platform, profile_name, i, data)
+            for i, data in enumerate(sample_pool)
+        ]
+
+        results.append(ProfileResult(
+            platform=platform,
+            profile=profile_name,
+            label=label,
+            url=url,
+            posts=posts,
+        ))
+        logger.info("Sample: %s (%s) — %d posts", label, platform, len(posts))
+
+    messages = {
+        r.profile: SAMPLE_MESSAGES.get(r.profile, ["product quality", "customer service", "innovation"])
+        for r in results
+    }
+
+    save_run(run_dir, results, messages)
+    logger.info("Dry run complete. Open http://localhost:8013 to preview the report.")
+
 
 def detect_scraper(url: str) -> type[ScraperBase] | None:
     for domain, cls in PLATFORM_SCRAPERS.items():
@@ -47,12 +138,11 @@ def run_scraper(config: dict) -> None:
     screenshot_width: int = config.get("screenshot_width", 1280)
     profiles: list[dict] = config.get("profiles", [])
 
-    run_id = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     run_dir = os.path.join(output_dir, run_id)
     screenshots_dir = os.path.join(run_dir, "screenshots")
     os.makedirs(screenshots_dir, exist_ok=True)
 
-    # Group profiles by platform so we log in once per platform
     platform_groups: dict[str, list[dict]] = defaultdict(list)
     scraper_classes: dict[str, type[ScraperBase]] = {}
     unknown: list[dict] = []
@@ -79,7 +169,6 @@ def run_scraper(config: dict) -> None:
         for platform, entries in platform_groups.items():
             ScraperClass = scraper_classes[platform]
 
-            # One browser context per platform — cookies are isolated between platforms
             context = browser.new_context(
                 viewport={"width": screenshot_width, "height": 900},
                 user_agent=(
@@ -89,7 +178,6 @@ def run_scraper(config: dict) -> None:
                 ),
             )
 
-            # Log in once for this platform
             login_page = context.new_page()
             logged_in = ScraperClass.login(login_page, config)
             login_page.close()
@@ -110,7 +198,6 @@ def run_scraper(config: dict) -> None:
                 context.close()
                 continue
 
-            # Scrape each profile in this platform's context (session cookies shared)
             for entry in entries:
                 url = entry["url"]
                 label = entry.get("label", url)
@@ -139,7 +226,6 @@ def run_scraper(config: dict) -> None:
 
         browser.close()
 
-    # Main message analysis via LiteLLM (one call per profile)
     messages: dict[str, list[str]] = {}
     for result in results:
         if result.posts and not result.error:
@@ -151,10 +237,22 @@ def run_scraper(config: dict) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Spotter — competitor social media monitor")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate a sample report with realistic fake data — no browser, no credentials required",
+    )
+    args = parser.parse_args()
+
     config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    run_scraper(config)
+
+    if args.dry_run:
+        dry_run(config)
+    else:
+        run_scraper(config)
 
 
 if __name__ == "__main__":
