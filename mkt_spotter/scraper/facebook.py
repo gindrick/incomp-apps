@@ -1,50 +1,91 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from bs4 import BeautifulSoup
-
 from .base import Post, ScraperBase
 
 logger = logging.getLogger(__name__)
 
-_RELATIVE_RE = re.compile(
-    r"(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago", re.IGNORECASE
-)
+
+def _deep_get(obj, *keys):
+    for key in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(key)
+        if obj is None:
+            return None
+    return obj
 
 
-def _parse_relative_date(text: str) -> datetime | None:
-    m = _RELATIVE_RE.search(text)
-    if not m:
-        return None
-    n, unit = int(m.group(1)), m.group(2).lower()
-    delta_map = {
-        "second": timedelta(seconds=n),
-        "minute": timedelta(minutes=n),
-        "hour": timedelta(hours=n),
-        "day": timedelta(days=n),
-        "week": timedelta(weeks=n),
-        "month": timedelta(days=n * 30),
-        "year": timedelta(days=n * 365),
-    }
-    return datetime.now(timezone.utc) - delta_map[unit]
+def _extract_stories(responses: list[str]) -> list[dict]:
+    seen: set[str] = set()
+    stories: list[dict] = []
 
+    for response_text in responses:
+        for line in response_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
 
-def _parse_count(text: str) -> int:
-    text = text.strip().replace(",", "").replace(".", "")
-    m = re.search(r"([\d]+)\s*([KkMm]?)", text)
-    if not m:
-        return 0
-    num = float(m.group(1))
-    suffix = m.group(2).upper()
-    if suffix == "K":
-        num *= 1_000
-    elif suffix == "M":
-        num *= 1_000_000
-    return int(num)
+            edges = _deep_get(data, "data", "node", "timeline_list_feed_units", "edges")
+            if not edges:
+                continue
+
+            for edge in edges:
+                node = edge.get("node", {})
+                if node.get("__typename") != "Story":
+                    continue
+
+                post_id = node.get("post_id", "")
+                if not post_id or post_id in seen:
+                    continue
+                seen.add(post_id)
+
+                permalink = node.get("permalink_url", "")
+                text = _deep_get(node, "comet_sections", "content", "story", "message", "text") or ""
+
+                creation_time = _deep_get(node, "comet_sections", "timestamp", "story", "creation_time")
+                published_at = (
+                    datetime.fromtimestamp(creation_time, tz=timezone.utc) if creation_time else None
+                )
+
+                feedback = _deep_get(
+                    node,
+                    "comet_sections", "feedback", "story", "story_ufi_container", "story",
+                    "feedback_context", "feedback_target_with_context",
+                    "comet_ufi_summary_and_actions_renderer", "feedback",
+                ) or {}
+                reactions = sum(
+                    e.get("reaction_count", 0)
+                    for e in (feedback.get("top_reactions") or {}).get("edges") or []
+                )
+
+                comment_instance = _deep_get(
+                    node,
+                    "comet_sections", "feedback", "story", "story_ufi_container", "story",
+                    "feedback_context", "feedback_target_with_context",
+                    "comment_rendering_instance",
+                ) or {}
+                comments = (comment_instance.get("comments") or {}).get("total_count", 0)
+
+                stories.append({
+                    "post_id": post_id,
+                    "url": permalink,
+                    "text": text,
+                    "published_at": published_at,
+                    "reactions": reactions,
+                    "comments": comments,
+                })
+
+    return stories
 
 
 class FacebookScraper(ScraperBase):
@@ -55,32 +96,30 @@ class FacebookScraper(ScraperBase):
         username = os.environ.get("FB_USERNAME", "")
         password = os.environ.get("FB_PASSWORD", "")
 
-        if not username or not password or "your_facebook" in username:
+        if not username or not password:
             logger.warning("Facebook: credentials not set — set FB_USERNAME / FB_PASSWORD in .env")
             return False
 
         logger.info("Facebook: logging in as %s", username)
         try:
-            page.goto("https://www.facebook.com/login", wait_until="domcontentloaded", timeout=20_000)
+            page.goto("https://www.facebook.com/login", wait_until="networkidle", timeout=30_000)
 
-            # Cookie consent before login form appears
-            for selector in [
-                'button:has-text("Allow all cookies")',
-                'button:has-text("Accept all")',
-                '[data-cookiebanner="accept_button"]',
-            ]:
+            # Facebook uses [role=button] divs, not <button> elements
+            for btn in page.locator("button, [role=button]").all():
                 try:
-                    btn = page.locator(selector).first
-                    if btn.is_visible(timeout=3_000):
-                        btn.click()
-                        page.wait_for_timeout(1_000)
-                        break
+                    text = btn.inner_text()
+                    if any(kw in text.lower() for kw in ("allow", "accept", "povolit", "erlauben", "accepter", "alle zulassen")):
+                        if btn.is_visible():
+                            btn.click()
+                            page.wait_for_timeout(1_500)
+                            break
                 except Exception:
                     pass
 
-            page.fill("#email", username)
-            page.fill("#pass", password)
-            page.click('[name="login"]')
+            page.wait_for_selector("[name=email]", timeout=10_000)
+            page.fill("[name=email]", username)
+            page.fill("[name=pass]", password)
+            page.press("[name=pass]", "Enter")
 
             page.wait_for_url(
                 re.compile(r"facebook\.com/(home|feed|\?|$)"),
@@ -99,79 +138,78 @@ class FacebookScraper(ScraperBase):
         profile_name = self.get_profile_name()
         logger.info("Facebook: scraping %s", self.url)
 
+        graphql_responses: list[str] = []
+
+        def handle_response(response):
+            try:
+                if "/api/graphql" not in response.url:
+                    return
+                body = response.body()
+                text = body.decode("utf-8", errors="replace")
+                if len(text) > 100:
+                    graphql_responses.append(text)
+            except Exception:
+                pass
+
         try:
+            self.page.on("response", handle_response)
             self.page.goto(self.url, wait_until="domcontentloaded", timeout=30_000)
             self.random_delay(2, 4)
 
-            # Scroll to load more posts
-            for _ in range(4):
+            for _ in range(6):
                 self.page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
-                self.random_delay(1.5, 3)
-
-            html = self.page.content()
+                self.random_delay(1.5, 2.5)
         except Exception as exc:
             logger.warning("Facebook: failed to load %s — %s", self.url, exc)
             return []
+        finally:
+            self.page.remove_listener("response", handle_response)
 
-        soup = BeautifulSoup(html, "html.parser")
+        logger.info("Facebook: captured %d GraphQL responses for %s", len(graphql_responses), profile_name)
+
+        # Scroll back to top so post elements are back in the DOM / viewport
+        try:
+            self.page.evaluate("window.scrollTo(0, 0)")
+            self.random_delay(1, 2)
+        except Exception:
+            pass
+
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.days_back)
+        stories = _extract_stories(graphql_responses)
+        logger.info("Facebook: extracted %d unique stories for %s", len(stories), profile_name)
+
         posts: list[Post] = []
-
-        articles = soup.find_all("div", attrs={"role": "article"})
-        if not articles:
-            logger.warning("Facebook: no articles found on %s", self.url)
-            return []
-
-        for i, article in enumerate(articles[:15]):
-            # Timestamp — Facebook uses <abbr> with title or <a> with relative text
-            time_el = article.find("abbr") or article.find(
-                "a", href=re.compile(r"/posts/|/videos/|/photos/")
-            )
-            published_at = None
-            if time_el:
-                ts_text = time_el.get("title") or time_el.get_text()
-                published_at = _parse_relative_date(ts_text)
-
+        for i, story in enumerate(stories[:15]):
+            published_at = story["published_at"]
             if published_at and published_at < cutoff:
                 continue
 
-            # Post text
-            text_div = (
-                article.find("div", attrs={"data-ad-comet-preview": "message"})
-                or article.find("div", attrs={"data-testid": "post_message"})
-            )
-            text = text_div.get_text(separator=" ", strip=True) if text_div else ""
-
-            # Engagement counts
-            reactions, comments = 0, 0
-            for span in article.find_all(["span", "a"]):
-                aria = span.get("aria-label", "")
-                t = span.get_text(strip=True)
-                if re.search(r"react|like|love|haha|wow|sad|angry", aria, re.I) and re.search(r"\d", t):
-                    if reactions == 0:
-                        reactions = _parse_count(t)
-                if re.search(r"comment", aria, re.I) and re.search(r"\d", t):
-                    if comments == 0:
-                        comments = _parse_count(t)
-
-            screenshot_file = ""
-            try:
-                locator = self.page.locator('[role="article"]').nth(i)
-                screenshot_file = self.take_screenshot(locator, f"facebook_{profile_name}_{i + 1}.png")
-            except Exception:
-                pass
+            screenshot_file = self._screenshot_post(story["url"], f"facebook_{profile_name}_{i + 1}.png")
 
             posts.append(Post(
                 platform=self.PLATFORM,
                 profile=profile_name,
-                url=self.url,
+                url=story["url"] or self.url,
                 published_at=published_at or datetime.now(timezone.utc),
-                text=text[:500],
-                reactions=reactions,
-                comments=comments,
+                text=story["text"][:500],
+                reactions=story["reactions"],
+                comments=story["comments"],
                 shares=0,
                 screenshot_path=screenshot_file,
             ))
 
         logger.info("Facebook: collected %d posts from %s", len(posts), profile_name)
         return posts
+
+    def _screenshot_post(self, permalink: str, filename: str) -> str:
+        if not self.screenshot_dir or not permalink or "facebook.com" not in permalink:
+            return ""
+        try:
+            self.page.goto(permalink, wait_until="domcontentloaded", timeout=15_000)
+            self.random_delay(1, 2)
+            path = os.path.join(self.screenshot_dir, filename)
+            self.page.screenshot(path=path, full_page=False)
+            return filename
+        except Exception as exc:
+            logger.debug("Facebook: screenshot failed for %s — %s", permalink, exc)
+            return ""
