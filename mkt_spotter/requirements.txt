@@ -1,0 +1,7 @@
+playwright==1.44.0
+beautifulsoup4==4.12.3
+pyyaml==6.0.2
+python-dateutil==2.9.0
+flask==3.0.3
+python-dotenv==1.0.1
+requests==2.32.3

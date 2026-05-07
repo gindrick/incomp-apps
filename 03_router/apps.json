@@ -46,5 +46,11 @@
     "target": "http://localhost:8012",
     "strip_prefix": true,
     "description": "Production Cards 2 Backend API"
+  },
+  {
+    "path": "spotter",
+    "target": "http://localhost:8013",
+    "strip_prefix": false,
+    "description": "Spotter — Competitor Social Media Monitor"
   }
 ]

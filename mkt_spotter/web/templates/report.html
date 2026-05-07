@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Spotter — Report {{ run_id }}{% endblock %}
+
+{% block content %}
+<div class="report-nav">
+  <a href="/" class="btn btn-secondary">&larr; All Reports</a>
+  <h2 class="report-title">{{ data.run_at | replace("T", " ") | truncate(16, True, "") }}</h2>
+  <div class="report-nav-arrows">
+    {% if next_run %}<a href="/report/{{ next_run }}" class="btn btn-secondary">Newer &rarr;</a>{% endif %}
+    {% if prev_run %}<a href="/report/{{ prev_run }}" class="btn btn-secondary">&larr; Older</a>{% endif %}
+  </div>
+</div>
+
+{% for profile in data.profiles %}
+<section class="profile-card {% if profile.error %}profile-error{% endif %}">
+  <div class="profile-header">
+    <span class="platform-badge platform-{{ profile.platform }}">
+      {% if profile.platform == "facebook" %}📘{% elif profile.platform == "instagram" %}📷{% else %}💼{% endif %}
+      {{ profile.platform | capitalize }}
+    </span>
+    <h3 class="profile-name">{{ profile.label }} <span class="profile-handle">({{ profile.profile }})</span></h3>
+  </div>
+
+  {% if profile.error %}
+    <p class="error-msg">Error: {{ profile.error }}</p>
+  {% else %}
+    <div class="profile-stats">
+      <span><strong>{{ profile.new_posts_count }}</strong> new post{% if profile.new_posts_count != 1 %}s{% endif %}</span>
+      {% if profile.top_post %}
+      <span><strong>Top:</strong> {{ profile.top_post.reactions }} 👍 &nbsp; {{ profile.top_post.comments }} 💬</span>
+      {% endif %}
+    </div>
+
+    {% if profile.main_message %}
+    <div class="tags">
+      {% for tag in profile.main_message %}
+      <span class="tag">{{ tag }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if profile.top_post and profile.top_post.text %}
+    <blockquote class="top-post-text">{{ profile.top_post.text | truncate(300) }}</blockquote>
+    {% endif %}
+
+    {% if profile.posts %}
+    <div class="screenshots">
+      {% for post in profile.posts %}
+        {% if post.screenshot_path %}
+        <a href="/reports/{{ run_id }}/screenshots/{{ post.screenshot_path }}" target="_blank">
+          <img
+            src="/reports/{{ run_id }}/screenshots/{{ post.screenshot_path }}"
+            alt="Screenshot"
+            class="screenshot-thumb"
+            loading="lazy"
+          />
+        </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

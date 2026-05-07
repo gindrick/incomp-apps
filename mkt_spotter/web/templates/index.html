@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Spotter — All Reports{% endblock %}
+
+{% block content %}
+<h1>All Reports</h1>
+
+{% if runs %}
+<div class="run-list">
+  {% for run in runs %}
+  <div class="run-card">
+    <div class="run-meta">
+      <span class="run-date">{{ run.run_at | replace("T", " ") | truncate(16, True, "") }}</span>
+      <span class="run-profiles">{{ run.profile_count }} profile{% if run.profile_count != 1 %}s{% endif %}</span>
+    </div>
+    <a href="/report/{{ run.run_id }}" class="btn">View Report</a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No reports yet. Run <code>python main.py</code> to generate the first report.</p>
+</div>
+{% endif %}
+{% endblock %}

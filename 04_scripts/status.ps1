@@ -11,6 +11,7 @@ $services = @(
     @{ Name = "hr-hiring-frontend";          Port = 5173; Desc = "HR Hiring frontend (Vite)" }
     @{ Name = "production-cards-backend";    Port = 8011; Desc = "Production Cards backend" }
     @{ Name = "production-cards-frontend";   Port = 5174; Desc = "Production Cards frontend" }
+    @{ Name = "spotter-web";                 Port = 8013; Desc = "Spotter web UI" }
 )
 
 # Načteme všechna naslouchající spojení jednou

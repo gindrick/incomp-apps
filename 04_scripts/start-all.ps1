@@ -135,6 +135,11 @@ Start-Service-Background `
     -WorkDir "$root\production_cards_2\3_frontend" `
     -Command "& 'C:\tools\node20\node.exe' .\node_modules\vite\bin\vite.js --host 0.0.0.0 --port 5175"
 
+Start-Service-Background `
+    -Name "spotter-web" `
+    -WorkDir "$root\mkt_spotter" `
+    -Command "uv run python web/app.py"
+
 Write-Host ""
 Write-Host "Všechny služby spuštěny na pozadí (bez oken)."
 Write-Host ""
@@ -150,5 +155,6 @@ Write-Host "  8011 - Production Cards backend"
 Write-Host "  5174 - Production Cards frontend (dev)"
 Write-Host "  8012 - Production Cards 2 backend"
 Write-Host "  5175 - Production Cards 2 frontend (dev)"
+Write-Host "  8013 - Spotter web UI"
 Write-Host ""
 Write-Host "Logy: $logDir\"

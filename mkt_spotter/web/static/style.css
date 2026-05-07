@@ -1,0 +1,166 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --border: #2a2d3a;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --success: #22c55e;
+  --error: #ef4444;
+  --fb: #1877f2;
+  --ig: #e1306c;
+  --li: #0a66c2;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.logo {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.tagline { color: var(--muted); font-size: 0.85rem; }
+
+.container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+
+/* Run list */
+.run-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.run-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.run-meta { display: flex; flex-direction: column; gap: 0.2rem; }
+.run-date { font-weight: 600; }
+.run-profiles { color: var(--muted); font-size: 0.85rem; }
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.btn-secondary:hover { background: var(--border); }
+
+/* Report nav */
+.report-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.report-title { flex: 1; font-size: 1.25rem; }
+.report-nav-arrows { display: flex; gap: 0.5rem; }
+
+/* Profile cards */
+.profile-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.profile-card.profile-error { border-color: var(--error); }
+
+.profile-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+
+.platform-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.platform-facebook { background: rgba(24,119,242,0.15); color: var(--fb); }
+.platform-instagram { background: rgba(225,48,108,0.15); color: var(--ig); }
+.platform-linkedin  { background: rgba(10,102,194,0.15); color: var(--li); }
+
+.profile-name { font-size: 1.1rem; }
+.profile-handle { color: var(--muted); font-weight: 400; font-size: 0.9em; }
+
+.profile-stats { display: flex; gap: 2rem; margin-bottom: 0.75rem; color: var(--muted); font-size: 0.9rem; }
+.profile-stats strong { color: var(--text); }
+
+.tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+.tag {
+  background: rgba(99,102,241,0.12);
+  color: var(--accent-hover);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+blockquote.top-post-text {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.screenshots { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.screenshot-thumb {
+  width: 160px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.screenshot-thumb:hover { transform: scale(1.04); }
+
+.error-msg { color: var(--error); font-size: 0.9rem; }
+
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 4rem 0;
+}
+.empty-state code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}

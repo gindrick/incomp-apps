@@ -1,0 +1,32 @@
+days_back: 7
+headless: true
+output_dir: reports
+screenshot_width: 1280
+
+profiles:
+  - url: https://www.facebook.com/HettichCR
+    label: Hettich CZ
+  - url: https://www.facebook.com/Hafele.Czech.Slovakia
+    label: Hafele CZ/SK
+  - url: https://www.instagram.com/rudolfostermann_karriere/
+    label: Rudolf Ostermann Karriere
+  - url: https://www.instagram.com/hettich_official/
+    label: Hettich Official
+  - url: https://www.linkedin.com/company/henkel/posts/?feedView=all
+    label: Henkel
+  - url: https://www.linkedin.com/company/moderne-kunststoff-technik-gebruder-eschbach-gmbh/posts/?feedView=all
+    label: MKT Eschbach
+
+facebook:
+  username_env: FB_USERNAME
+  password_env: FB_PASSWORD
+
+instagram:
+  username_env: IG_USERNAME
+  password_env: IG_PASSWORD
+
+linkedin:
+  username_env: LI_USERNAME
+  password_env: LI_PASSWORD
+
+# Use dedicated monitoring accounts with 2FA disabled for all platforms.
