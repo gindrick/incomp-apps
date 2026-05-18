@@ -1,36 +1,36 @@
 # JJA — Workspace
 
-Monorepo pro AI a HR aplikace. Sdílená infrastruktura (MCP, LiteLLM, Router) běží jako společné služby pro všechny projekty. Každý projekt je dostupný přes centrální reverse proxy na portu **8000**.
+Monorepo for AI and HR applications. Shared infrastructure (MCP, LiteLLM, Router) runs as common services for all projects. Each project is accessible via a central reverse proxy on port **8000**.
 
 ---
 
-## Struktura rootu
+## Root Structure
 
 ```
 c:\jja\
-├── 01_mcp/              Sdílený MCP server — všechny nástroje pro AI agenty
-├── 02_litellm/          Sdílený LiteLLM proxy — jednotný přístup k LLM providerům
-├── 03_router/           Reverse proxy — routuje URL cesty na interní služby (port 8000)
-├── 04_scripts/          Obslužné skripty — spuštění a zastavení všech služeb
+├── 01_mcp/              Shared MCP server — all tools for AI agents
+├── 02_litellm/          Shared LiteLLM proxy — unified access to LLM providers
+├── 03_router/           Reverse proxy — routes URL paths to internal services (port 8000)
+├── 04_scripts/          Utility scripts — start and stop all services
 │
-├── react_assistant/     Projekt: AI agenti (ReAct, Plan-Execute, Workflow) + SharePoint
-├── hr_hiring/           Projekt: HR hiring platforma (backend + React frontend)
-├── production_cards/    Projekt: Výrobní karty — extrakce dat z PDF nastavovacích karet
-├── hr_demo/             Projekt: HR demo dashboard
-├── ollama_hrx/          Projekt: Ollama lokální LLM aplikace (standalone)
+├── react_assistant/     Project: AI agents (ReAct, Plan-Execute, Workflow) + SharePoint
+├── hr_hiring/           Project: HR hiring platform (backend + React frontend)
+├── production_cards/    Project: Production Cards — data extraction from PDF setup cards
+├── hr_demo/             Project: HR demo dashboard
+├── ollama_hrx/          Project: Ollama local LLM application (standalone)
 │
-├── .env                 Globální API klíče (není v gitu)
-└── .env.example         Šablona globálního .env
+├── .env                 Global API keys (not in git)
+└── .env.example         Global .env template
 ```
 
 ---
 
-## Porty
+## Ports
 
-| Port | Služba | Popis |
-|------|--------|-------|
-| **8000** | `03_router` | Vstupní bod — všechny projekty přes tento port |
-| 8001 | `react_assistant` | Web UI pro AI agenty |
+| Port | Service | Description |
+|------|---------|-------------|
+| **8000** | `03_router` | Entry point — all projects through this port |
+| 8001 | `react_assistant` | Web UI for AI agents |
 | 8002 | `01_mcp` | MCP server |
 | 8003 | `hr_demo` | HR demo dashboard |
 | 4000 | `02_litellm` | LiteLLM proxy |
@@ -41,11 +41,11 @@ c:\jja\
 
 ---
 
-## URL adresy projektů
+## Project URLs
 
-Vše přes router na `http://localhost:8000`:
+All via the router at `http://localhost:8000`:
 
-| URL | Projekt |
+| URL | Project |
 |-----|---------|
 | `http://localhost:8000/react_assistant` | React Assistant |
 | `http://localhost:8000/dashboard` | HR Demo |
@@ -54,101 +54,101 @@ Vše přes router na `http://localhost:8000`:
 | `http://localhost:8000/production_cards` | Production Cards (frontend) |
 | `http://localhost:8000/production_cards_api` | Production Cards (API) |
 
-> `ollama_hrx` není zatím naroutován — spouští se samostatně.
+> `ollama_hrx` is not yet routed — it starts standalone.
 
 ---
 
-## Spuštění
+## Starting Services
 
 ```powershell
-# Spustí všechny sdílené služby + projekty na pozadí (bez oken)
+# Starts all shared services + projects in the background (no windows)
 ./04_scripts/start-all.ps1
 
-# Zobrazí stav každé služby (port, uptime)
+# Shows the status of each service (port, uptime)
 ./04_scripts/status.ps1
 
-# Zastaví vše a spustí znovu
+# Stops everything and restarts
 ./04_scripts/restart.ps1
 ```
 
-> Při startu serveru se `start-all.ps1` spouští automaticky přes Windows Scheduled Task `JJA\StartAll` (s 30s zpožděním po bootu).
+> On server boot, `start-all.ps1` runs automatically via Windows Scheduled Task `JJA\StartAll` (with a 30s delay after boot).
 
 ---
 
-## Konfigurace (.env)
+## Configuration (.env)
 
-Konfigurace je vrstvená — globální klíče v rootu, projektová specifika v každém projektu:
+Configuration is layered — global keys at the root, project-specific values in each project:
 
 ```
-c:\jja\.env                ← globální (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...)
-c:\jja\01_mcp\.env         ← MCP specifické (MSSQL, TAVILY, WOLFRAM)
-c:\jja\02_litellm\.env     ← LiteLLM specifické (LITELLM_MASTER_KEY, OLLAMA_API_BASE)
-c:\jja\<projekt>\.env      ← projektové (MODEL=..., MCP_TOOLS=..., ...)
+c:\jja\.env                ← global (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...)
+c:\jja\01_mcp\.env         ← MCP-specific (MSSQL, TAVILY, WOLFRAM)
+c:\jja\02_litellm\.env     ← LiteLLM-specific (LITELLM_MASTER_KEY, OLLAMA_API_BASE)
+c:\jja\<project>\.env      ← project-specific (MODEL=..., MCP_TOOLS=..., ...)
 ```
 
-Každý adresář obsahuje `.env.example` jako šablonu. Nikdy necommituj `.env` soubory.
+Every directory contains a `.env.example` as a template. Never commit `.env` files.
 
 ---
 
-## Přidání nového projektu
+## Adding a New Project
 
-### 1. Vytvoř složku projektu
+### 1. Create the project folder
 
 ```
-c:\jja\<nazev_projektu>\
-├── .env.example     ← dokumentuj potřebné proměnné
+c:\jja\<project_name>\
+├── .env.example     ← document required variables
 ├── .env
-├── pyproject.toml   (nebo package.json pro Node)
+├── pyproject.toml   (or package.json for Node)
 └── README.md
 ```
 
-### 2. Zvol volný port
+### 2. Choose a free port
 
-Viz tabulka portů výše. Aplikace musí naslouchat na `127.0.0.1` (nebo `0.0.0.0` pokud potřebuješ přístup ze sítě).
+See the port table above. The app must listen on `127.0.0.1` (or `0.0.0.0` if you need network access).
 
-### 3. Zaregistruj projekt v routeru
+### 3. Register the project in the router
 
-Přidej záznam do [03_router/apps.json](03_router/apps.json):
+Add an entry to [03_router/apps.json](03_router/apps.json):
 
 ```json
 {
-  "path": "nazev_v_url",
+  "path": "name_in_url",
   "target": "http://127.0.0.1:8020",
   "strip_prefix": false,
-  "description": "Popis projektu"
+  "description": "Project description"
 }
 ```
 
-> Router načítá `apps.json` dynamicky — **restart routeru není potřeba**.
+> The router loads `apps.json` dynamically — **no router restart needed**.
 
-### 4. Přidej projekt do start-all.ps1
+### 4. Add the project to start-all.ps1
 
-V [04_scripts/start-all.ps1](04_scripts/start-all.ps1) přidej blok na konec sekce `# --- Projekty ---`:
+In [04_scripts/start-all.ps1](04_scripts/start-all.ps1) add a block at the end of the `# --- Projects ---` section:
 
 ```powershell
 Start-Service-Background `
-    -Name "nazev-projektu" `
-    -WorkDir "$root\nazev_projektu" `
+    -Name "project-name" `
+    -WorkDir "$root\project_name" `
     -Command "uv run python -m uvicorn main:app --host 127.0.0.1 --port 8020"
 ```
 
-A do výpisu portů na konci souboru:
+And in the port listing at the end of the file:
 
 ```powershell
-Write-Host "  8020 - Název projektu"
+Write-Host "  8020 - Project Name"
 ```
 
-### 5. Přidej projekt do status.ps1
+### 5. Add the project to status.ps1
 
-V [04_scripts/status.ps1](04_scripts/status.ps1) přidej řádek do pole `$services`:
+In [04_scripts/status.ps1](04_scripts/status.ps1) add a line to the `$services` array:
 
 ```powershell
-@{ Name = "nazev-projektu"; Port = 8020; Desc = "Popis projektu" }
+@{ Name = "project-name"; Port = 8020; Desc = "Project description" }
 ```
 
-### 6. Nastav .env
+### 6. Set up .env
 
-Pokud projekt potřebuje sdílené služby, přidej do `.env` projektu:
+If the project needs shared services, add to the project's `.env`:
 
 ```env
 LITELLM_BASE_URL=http://127.0.0.1:4000    # LiteLLM proxy
@@ -158,19 +158,19 @@ MCP_SERVER_URL=http://127.0.0.1:8002/mcp  # MCP server
 
 ---
 
-## Aktuální projekty
+## Current Projects
 
 ### react_assistant
-AI agenti s různými reasoning patterny (ReAct, Plan-Execute, Workflow). Zahrnuje SharePoint ingestion pipeline a Chroma vector DB pro retrieval. Web UI dostupné přes router.
+AI agents with various reasoning patterns (ReAct, Plan-Execute, Workflow). Includes a SharePoint ingestion pipeline and Chroma vector DB for retrieval. Web UI accessible via the router.
 
 ### hr_hiring
-Kompletní HR hiring platforma. FastAPI backend s LangGraph workflow pro AI evaluaci kandidátů, React + Vite frontend s Azure AD (MSAL) autentizací.
+Full HR hiring platform. FastAPI backend with LangGraph workflow for AI candidate evaluation, React + Vite frontend with Azure AD (MSAL) authentication.
 
 ### production_cards
-Extrakce dat z PDF nastavovacích karet extruzních linek. FastAPI backend s LiteLLM extrakcí (PyMuPDF + LLM structured output), React + Vite frontend se split-view (náhled PDF | editace), export do XLSX. MSSQL schema `production_cards`.
+Data extraction from PDF setup cards for extrusion lines. FastAPI backend with LiteLLM extraction (PyMuPDF + LLM structured output), React + Vite frontend with split-view (PDF preview | editing), export to XLSX. MSSQL schema `production_cards`.
 
 ### hr_demo
-Jednoduchý HR demo dashboard. FastAPI backend se statickým frontendem.
+Simple HR demo dashboard. FastAPI backend with a static frontend.
 
 ### ollama_hrx
-Standalone aplikace postavená na Ollama lokálním LLM. Má vlastní web UI a knowledge base. Zatím není integrována do routeru.
+Standalone application built on Ollama local LLM. Has its own web UI and knowledge base. Not yet integrated into the router.
