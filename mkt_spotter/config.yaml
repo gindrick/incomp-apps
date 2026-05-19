@@ -1,4 +1,4 @@
-days_back: 7
+days_back: 30
 headless: true
 output_dir: reports
 screenshot_width: 1280

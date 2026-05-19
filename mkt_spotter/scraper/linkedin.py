@@ -132,19 +132,44 @@ class LinkedInScraper(ScraperBase):
 
         logger.info("LinkedIn: logging in as %s", username)
         try:
-            page.goto("https://www.linkedin.com/login", wait_until="networkidle", timeout=30_000)
-            page.wait_for_selector("#username", timeout=10_000)
-            page.fill("#username", username)
+            page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_timeout(2_000)
+
+            # LinkedIn serves two login page variants — try both selectors.
+            email_field = None
+            for sel in ("#username", 'input[type="email"]', 'input[name="session_key"]'):
+                try:
+                    page.wait_for_selector(sel, timeout=5_000)
+                    email_field = sel
+                    break
+                except Exception:
+                    pass
+
+            if email_field is None:
+                if "checkpoint" in page.url or "challenge" in page.url:
+                    logger.warning(
+                        "LinkedIn: verification challenge — run 'uv run python setup_session.py' to complete login manually"
+                    )
+                else:
+                    logger.warning("LinkedIn: login form not found at %s", page.url)
+                return False
+
+            page.fill(email_field, username)
             page.fill("#password", password)
             page.click('[type="submit"]')
             page.wait_for_url(
                 re.compile(r"linkedin\.com/(feed|in/|mynetwork|jobs)"),
-                timeout=15_000,
+                timeout=20_000,
             )
             logger.info("LinkedIn: login successful")
             return True
         except Exception as exc:
-            logger.warning("LinkedIn: login failed — %s", exc)
+            if "checkpoint" in page.url or "challenge" in page.url:
+                logger.warning(
+                    "LinkedIn: verification challenge after login — run 'uv run python setup_session.py' to complete login manually"
+                )
+            else:
+                logger.warning("LinkedIn: login failed — %s", exc)
             return False
 
     def get_profile_name(self) -> str:
@@ -173,7 +198,8 @@ class LinkedInScraper(ScraperBase):
 
         try:
             self.page.on("response", handle_response)
-            self.page.goto(self.url, wait_until="networkidle", timeout=30_000)
+            self.page.goto(self.url, wait_until="domcontentloaded", timeout=60_000)
+            self.page.wait_for_timeout(3_000)
             self.random_delay(2, 4)
 
             for _ in range(4):

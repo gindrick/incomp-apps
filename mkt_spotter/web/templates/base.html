@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Spotter{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" />
 </head>
 <body>
   <header class="site-header">
-    <a href="/" class="logo">Spotter</a>
+    <a href="{{ url_for('index') }}" class="logo">Spotter</a>
     <span class="tagline">Competitor Social Media Monitor</span>
   </header>
   <main class="container">

@@ -51,6 +51,7 @@ Import-EnvFile "$root\01_mcp\.env"
 Import-EnvFile "$root\hr_hiring\2_backend\.env" -Force
 Import-EnvFile "$root\production_cards\2_backend\.env" -Force
 Import-EnvFile "$root\production_cards_2\2_backend\.env" -Force
+Import-EnvFile "$root\mkt_spotter\.env"
 
 # --- Pomocná funkce pro spuštění služby na pozadí ---
 # Každá služba dostane vlastní log soubor. Starý log se při startu přepíše.
@@ -134,6 +135,10 @@ Start-Service-Background `
     -Name "production-cards-2-frontend" `
     -WorkDir "$root\production_cards_2\3_frontend" `
     -Command "& 'C:\tools\node20\node.exe' .\node_modules\vite\bin\vite.js --host 0.0.0.0 --port 5175"
+
+# Kill any existing process holding port 8013 so restarts are idempotent
+$p8013 = (Get-NetTCPConnection -LocalPort 8013 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p8013) { Stop-Process -Id $p8013 -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
 
 Start-Service-Background `
     -Name "spotter-web" `

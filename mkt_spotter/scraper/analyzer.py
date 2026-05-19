@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 
 import requests
 
@@ -42,8 +44,10 @@ def analyze_main_message(posts_text: list[str]) -> list[str]:
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"].strip()
+        # Strip markdown code fences (```json ... ```) that some models emit
+        content = re.sub(r"^```(?:json)?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content).strip()
 
-        import json
         themes = json.loads(content)
         if isinstance(themes, list):
             return [str(t) for t in themes[:5]]

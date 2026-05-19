@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 reports/*/
 !reports/.gitkeep
+sessions/*_state.json

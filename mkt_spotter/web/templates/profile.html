@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Spotter — {{ profile.label }}{% endblock %}
+
+{% block content %}
+<div class="report-nav">
+  <a href="{{ url_for('report', run_id=run_id) }}" class="btn btn-secondary">&larr; Report</a>
+  <div class="profile-header">
+    <span class="platform-badge platform-{{ profile.platform }}">
+      {% if profile.platform == "facebook" %}📘{% elif profile.platform == "instagram" %}📷{% else %}💼{% endif %}
+      {{ profile.platform | capitalize }}
+    </span>
+    <h2 class="report-title">{{ profile.label }} <span class="profile-handle">{{ profile.profile }}</span></h2>
+  </div>
+  <a href="{{ profile.url }}" target="_blank" class="btn btn-secondary">Open Profile ↗</a>
+</div>
+
+{% if profile.error %}
+<div class="error-box">
+  <p class="error-msg">Scraping failed: {{ profile.error }}</p>
+</div>
+{% elif not posts %}
+<div class="empty-state">
+  <p>No posts found for this profile in this run.</p>
+</div>
+{% else %}
+<p class="posts-count">{{ posts | length }} post{% if posts | length != 1 %}s{% endif %}, newest first</p>
+
+<div class="post-list">
+  {% for post in posts %}
+  <div class="post-card">
+    <div class="post-meta">
+      <span class="post-date">{{ post.published_at | replace("T", " ") | truncate(16, True, "") }}</span>
+      <span class="post-engagement">
+        👍 {{ post.reactions }}
+        &nbsp;&nbsp;💬 {{ post.comments }}
+        {% if post.shares %}&nbsp;&nbsp;🔄 {{ post.shares }}{% endif %}
+      </span>
+      <a href="{{ post.url }}" target="_blank" class="post-link">Open post ↗</a>
+    </div>
+    {% if post.text %}
+    <p class="post-text">{{ post.text }}</p>
+    {% endif %}
+    {% if post.screenshot_path %}
+    <div class="post-screenshot-wrap">
+      <a href="{{ url_for('screenshot', run_id=run_id, filename=post.screenshot_path) }}" target="_blank">
+        <img
+          src="{{ url_for('screenshot', run_id=run_id, filename=post.screenshot_path) }}"
+          alt="Post screenshot"
+          class="post-screenshot"
+          loading="lazy"
+        />
+      </a>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

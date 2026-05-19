@@ -50,7 +50,7 @@
   {
     "path": "spotter",
     "target": "http://localhost:8013",
-    "strip_prefix": false,
+    "strip_prefix": true,
     "description": "Spotter — Competitor Social Media Monitor"
   }
 ]

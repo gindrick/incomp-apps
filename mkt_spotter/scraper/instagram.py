@@ -18,18 +18,47 @@ def _extract_posts(responses: list[str]) -> list[dict]:
         except (json.JSONDecodeError, ValueError):
             continue
 
-        # web_profile_info: data.user.edge_owner_to_timeline_media.edges
+        # New format (2025+): xdt_api__v1__feed__user_timeline_graphql_connection
+        posts = _parse_timeline_graphql_connection(data)
+        if posts:
+            return posts
+
+        # Legacy format: web_profile_info → data.user.edge_owner_to_timeline_media.edges
         user = (data.get("data") or {}).get("user") or {}
         edges = (user.get("edge_owner_to_timeline_media") or {}).get("edges") or []
         if edges:
             return _parse_timeline_edges(edges)
 
-        # /api/v1/feed/user/{id}/ format: {"items": [...]}
+        # Legacy: /api/v1/feed/user/{id}/ format: {"items": [...]}
         items = data.get("items") or []
         if items and isinstance(items[0], dict) and "taken_at" in items[0]:
             return _parse_feed_items(items)
 
     return []
+
+
+def _parse_timeline_graphql_connection(data: dict) -> list[dict]:
+    conn = ((data.get("data") or {}).get("xdt_api__v1__feed__user_timeline_graphql_connection") or {})
+    edges = conn.get("edges") or []
+    posts = []
+    for edge in edges:
+        node = edge.get("node") or {}
+        shortcode = node.get("code") or node.get("shortcode") or ""
+        taken_at = node.get("taken_at")
+        published_at = datetime.fromtimestamp(taken_at, tz=timezone.utc) if taken_at else None
+        caption = node.get("caption") or {}
+        text = caption.get("text", "") if isinstance(caption, dict) else str(caption or "")
+        reactions = node.get("like_count") or 0
+        comments = node.get("comment_count") or 0
+        if shortcode:
+            posts.append({
+                "shortcode": shortcode,
+                "published_at": published_at,
+                "text": text,
+                "reactions": reactions,
+                "comments": comments,
+            })
+    return posts
 
 
 def _parse_timeline_edges(edges: list) -> list[dict]:
@@ -87,29 +116,47 @@ class InstagramScraper(ScraperBase):
 
         logger.info("Instagram: logging in as %s", username)
         try:
-            page.goto("https://www.instagram.com/accounts/login/", wait_until="networkidle", timeout=30_000)
-            page.wait_for_timeout(2_000)
+            page.goto("https://www.instagram.com/accounts/login/", wait_until="domcontentloaded", timeout=30_000)
+            page.wait_for_timeout(3_000)
 
-            # Cookie consent — language-agnostic
+            # Cookie consent must be dismissed before the login form becomes interactive.
             for btn in page.locator("button, [role=button]").all():
                 try:
                     text = btn.inner_text()
-                    if any(kw in text.lower() for kw in ("allow", "accept", "povolit", "erlauben", "accepter", "alle cookies")):
+                    if any(kw in text.lower() for kw in ("allow", "accept", "decline", "odmítnout", "povolit", "erlauben", "accepter", "alle cookies")):
                         if btn.is_visible():
                             btn.click()
-                            page.wait_for_timeout(1_500)
+                            page.wait_for_timeout(2_000)
                             break
                 except Exception:
                     pass
 
-            page.wait_for_selector('input[name="username"]', timeout=10_000)
-            page.fill('input[name="username"]', username)
-            page.fill('input[name="password"]', password)
-            page.click('button[type="submit"]')
+            # Instagram login form uses input[name="username"] or input[name="email"] depending on variant.
+            username_sel = None
+            for sel in ('input[name="username"]', 'input[name="email"]'):
+                try:
+                    page.wait_for_selector(sel, timeout=5_000)
+                    username_sel = sel
+                    break
+                except Exception:
+                    pass
+
+            if username_sel is None:
+                raise RuntimeError("Login form not found — cookie consent may not have been dismissed")
+
+            page.fill(username_sel, username)
+            page.fill('input[type="password"]', password)
+
+            # Submit: try type=submit button, fall back to Enter key
+            submit = page.locator('button[type="submit"]')
+            if submit.count() > 0 and submit.is_visible():
+                submit.click()
+            else:
+                page.press('input[type="password"]', "Enter")
 
             page.wait_for_url(
                 re.compile(r"instagram\.com/(?!accounts/login)"),
-                timeout=15_000,
+                timeout=20_000,
             )
             page.wait_for_timeout(2_000)
 
@@ -133,7 +180,12 @@ class InstagramScraper(ScraperBase):
             logger.info("Instagram: login successful")
             return True
         except Exception as exc:
-            logger.warning("Instagram: login failed — %s", exc)
+            if "challenge" in page.url or "two_factor" in page.url:
+                logger.warning(
+                    "Instagram: 2FA/challenge required — run 'uv run python setup_session.py' once to save your session"
+                )
+            else:
+                logger.warning("Instagram: login failed — %s", exc)
             return False
 
     def get_profile_name(self) -> str:
@@ -158,8 +210,12 @@ class InstagramScraper(ScraperBase):
 
         try:
             self.page.on("response", handle_response)
-            self.page.goto(self.url, wait_until="networkidle", timeout=30_000)
+            self.page.goto(self.url, wait_until="domcontentloaded", timeout=30_000)
             self.random_delay(2, 4)
+            # Scroll to trigger lazy-loaded API calls
+            for _ in range(3):
+                self.page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
+                self.random_delay(1, 2)
         except Exception as exc:
             logger.warning("Instagram: failed to load %s — %s", self.url, exc)
             return []

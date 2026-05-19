@@ -33,6 +33,39 @@ PLATFORM_SCRAPERS: dict[str, type[ScraperBase]] = {
     "linkedin.com": LinkedInScraper,
 }
 
+_PLATFORM_ENV_VARS: dict[str, tuple[str, str]] = {
+    "facebook":  ("FB_USERNAME",  "FB_PASSWORD"),
+    "instagram": ("IG_USERNAME",  "IG_PASSWORD"),
+    "linkedin":  ("LI_USERNAME",  "LI_PASSWORD"),
+}
+
+_PLACEHOLDER_PREFIXES = ("your_",)
+_PLACEHOLDER_SUFFIXES = ("@example.com",)
+
+
+def _is_placeholder(value: str) -> bool:
+    return (
+        not value
+        or any(value.startswith(p) for p in _PLACEHOLDER_PREFIXES)
+        or any(value.endswith(s) for s in _PLACEHOLDER_SUFFIXES)
+    )
+
+
+def _validate_credentials() -> set[str]:
+    """Return platforms that have real (non-placeholder) credentials in the environment."""
+    valid: set[str] = set()
+    for platform, (user_var, pass_var) in _PLATFORM_ENV_VARS.items():
+        username = os.environ.get(user_var, "")
+        password = os.environ.get(pass_var, "")
+        if _is_placeholder(username) or _is_placeholder(password):
+            logger.warning(
+                "Skipping %s — credentials not configured (set %s / %s in .env)",
+                platform, user_var, pass_var,
+            )
+        else:
+            valid.add(platform)
+    return valid
+
 SAMPLE_POSTS: dict[str, list[dict]] = {
     "facebook": [
         {"text": "We are thrilled to present our latest hinge collection at LIGNA trade fair in Hannover! Stop by Hall 12, Stand B42. #LIGNA2025 #Innovation", "reactions": 184, "comments": 16},
@@ -124,6 +157,13 @@ def dry_run(config: dict) -> None:
     logger.info("Dry run complete. Open http://localhost:8013 to preview the report.")
 
 
+SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
+
+
+def _session_path(platform: str) -> str:
+    return os.path.join(SESSIONS_DIR, f"{platform}_state.json")
+
+
 def detect_scraper(url: str) -> type[ScraperBase] | None:
     for domain, cls in PLATFORM_SCRAPERS.items():
         if domain in url:
@@ -143,6 +183,8 @@ def run_scraper(config: dict) -> None:
     screenshots_dir = os.path.join(run_dir, "screenshots")
     os.makedirs(screenshots_dir, exist_ok=True)
 
+    valid_platforms = _validate_credentials()
+
     platform_groups: dict[str, list[dict]] = defaultdict(list)
     scraper_classes: dict[str, type[ScraperBase]] = {}
     unknown: list[dict] = []
@@ -156,12 +198,30 @@ def run_scraper(config: dict) -> None:
             platform_groups[cls.PLATFORM].append(entry)
             scraper_classes[cls.PLATFORM] = cls
 
+    # Separate out profiles whose platform has no credentials configured.
+    unconfigured_results: list[ProfileResult] = []
+    for platform in list(platform_groups.keys()):
+        if platform not in valid_platforms:
+            user_var, pass_var = _PLATFORM_ENV_VARS.get(platform, ("?", "?"))
+            for entry in platform_groups.pop(platform):
+                unconfigured_results.append(ProfileResult(
+                    platform=platform,
+                    profile=entry["url"].rstrip("/").split("/")[-1],
+                    label=entry.get("label", entry["url"]),
+                    url=entry["url"],
+                    error=f"Credentials not configured — set {user_var} / {pass_var} in .env",
+                ))
+            scraper_classes.pop(platform, None)
+
     logger.info(
-        "Starting Spotter run %s — %d profiles across %d platforms",
-        run_id, len(profiles) - len(unknown), len(platform_groups),
+        "Starting Spotter run %s — %d profiles across %d platforms (%d skipped: no credentials)",
+        run_id,
+        len(profiles) - len(unknown) - len(unconfigured_results),
+        len(platform_groups),
+        len(unconfigured_results),
     )
 
-    results: list[ProfileResult] = []
+    results: list[ProfileResult] = list(unconfigured_results)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless)
@@ -169,18 +229,33 @@ def run_scraper(config: dict) -> None:
         for platform, entries in platform_groups.items():
             ScraperClass = scraper_classes[platform]
 
-            context = browser.new_context(
-                viewport={"width": screenshot_width, "height": 900},
-                user_agent=(
+            session_file = _session_path(platform)
+            context_kwargs: dict = {
+                "viewport": {"width": screenshot_width, "height": 900},
+                "user_agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
-            )
+            }
+            if os.path.exists(session_file):
+                context_kwargs["storage_state"] = session_file
+                logger.info("%s: loading saved session from %s", platform, session_file)
 
-            login_page = context.new_page()
-            logged_in = ScraperClass.login(login_page, config)
-            login_page.close()
+            context = browser.new_context(**context_kwargs)
+
+            if os.path.exists(session_file):
+                # Trust the saved session — skip login entirely.
+                logged_in = True
+                logger.info("%s: using saved session (skipping login)", platform)
+            else:
+                login_page = context.new_page()
+                logged_in = ScraperClass.login(login_page, config)
+                if logged_in:
+                    os.makedirs(SESSIONS_DIR, exist_ok=True)
+                    context.storage_state(path=session_file)
+                    logger.info("%s: session saved to %s", platform, session_file)
+                login_page.close()
 
             if not logged_in:
                 logger.warning(

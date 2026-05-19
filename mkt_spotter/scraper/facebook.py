@@ -21,6 +21,29 @@ def _deep_get(obj, *keys):
     return obj
 
 
+def _find_timeline_edges(data: dict) -> list | None:
+    """Search for timeline feed edges across known GraphQL response shapes."""
+    root = data.get("data") or {}
+    # Try well-known root keys first
+    for root_key in ("node", "page", "viewer", "media"):
+        node = root.get(root_key)
+        if isinstance(node, dict):
+            edges = _deep_get(node, "timeline_list_feed_units", "edges")
+            if edges:
+                return edges
+            # viewer wraps timeline differently
+            edges = _deep_get(node, "feed", "edges") or _deep_get(node, "feed_stories", "edges")
+            if edges:
+                return edges
+    # Generic scan one level deep for any key containing "timeline" or "feed_units"
+    for v in root.values():
+        if isinstance(v, dict):
+            edges = _deep_get(v, "timeline_list_feed_units", "edges")
+            if edges:
+                return edges
+    return None
+
+
 def _extract_stories(responses: list[str]) -> list[dict]:
     seen: set[str] = set()
     stories: list[dict] = []
@@ -35,7 +58,7 @@ def _extract_stories(responses: list[str]) -> list[dict]:
             except (json.JSONDecodeError, ValueError):
                 continue
 
-            edges = _deep_get(data, "data", "node", "timeline_list_feed_units", "edges")
+            edges = _find_timeline_edges(data)
             if not edges:
                 continue
 
@@ -102,9 +125,8 @@ class FacebookScraper(ScraperBase):
 
         logger.info("Facebook: logging in as %s", username)
         try:
-            page.goto("https://www.facebook.com/login", wait_until="networkidle", timeout=30_000)
+            page.goto("https://www.facebook.com/login", wait_until="domcontentloaded", timeout=30_000)
 
-            # Facebook uses [role=button] divs, not <button> elements
             for btn in page.locator("button, [role=button]").all():
                 try:
                     text = btn.inner_text()
@@ -122,13 +144,18 @@ class FacebookScraper(ScraperBase):
             page.press("[name=pass]", "Enter")
 
             page.wait_for_url(
-                re.compile(r"facebook\.com/(home|feed|\?|$)"),
+                re.compile(r"facebook\.com/(feed|home)"),
                 timeout=15_000,
             )
             logger.info("Facebook: login successful")
             return True
         except Exception as exc:
-            logger.warning("Facebook: login failed — %s", exc)
+            if "two_step_verification" in page.url:
+                logger.warning(
+                    "Facebook: 2FA required — run 'uv run python setup_session.py' once to save your session"
+                )
+            else:
+                logger.warning("Facebook: login failed — %s", exc)
             return False
 
     def get_profile_name(self) -> str:
@@ -136,7 +163,7 @@ class FacebookScraper(ScraperBase):
 
     def get_posts(self) -> list[Post]:
         profile_name = self.get_profile_name()
-        logger.info("Facebook: scraping %s", self.url)
+        logger.info("Facebook: scraping %s", self.url.rstrip("/") + "/posts/")
 
         graphql_responses: list[str] = []
 
@@ -151,28 +178,34 @@ class FacebookScraper(ScraperBase):
             except Exception:
                 pass
 
+        posts_url = self.url.rstrip("/") + "/posts/"
         try:
             self.page.on("response", handle_response)
-            self.page.goto(self.url, wait_until="domcontentloaded", timeout=30_000)
-            self.random_delay(2, 4)
+            self.page.goto(posts_url, wait_until="domcontentloaded", timeout=30_000)
+            self.random_delay(3, 5)
 
-            for _ in range(6):
+            for _ in range(8):
                 self.page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
-                self.random_delay(1.5, 2.5)
+                self.random_delay(2, 3)
         except Exception as exc:
-            logger.warning("Facebook: failed to load %s — %s", self.url, exc)
+            logger.warning("Facebook: failed to load %s — %s", posts_url, exc)
             return []
         finally:
             self.page.remove_listener("response", handle_response)
 
         logger.info("Facebook: captured %d GraphQL responses for %s", len(graphql_responses), profile_name)
 
-        # Scroll back to top so post elements are back in the DOM / viewport
-        try:
-            self.page.evaluate("window.scrollTo(0, 0)")
-            self.random_delay(1, 2)
-        except Exception:
-            pass
+        # Detect 2FA checkpoint — all responses are verification queries, no feed content.
+        if graphql_responses and all(
+            "two_step_verification" in r or "xfb_two_step" in r
+            for r in graphql_responses
+        ):
+            logger.warning(
+                "Facebook: session requires 2FA re-verification for %s — "
+                "run 'uv run python setup_session.py' and re-login to Facebook",
+                profile_name,
+            )
+            return []
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.days_back)
         stories = _extract_stories(graphql_responses)
