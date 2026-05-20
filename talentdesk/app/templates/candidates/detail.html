@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+{% block title %}{{ candidate.last_name or '' }} {{ candidate.first_name or '' }} — TalentDesk{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+
+  <!-- Breadcrumb -->
+  <div class="flex items-center gap-3 mb-6">
+    <a href="{{ prefix }}/recruitments/{{ candidate.recruitment_id }}" class="inline-flex items-center gap-2 text-sm text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      {{ candidate.recruitment.title }}
+    </a>
+  </div>
+
+  <!-- Header -->
+  <div class="flex items-start justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold text-white">{{ candidate.last_name or '' }} {{ candidate.first_name or '' }}{% if candidate.age %} <span class="text-gray-400 font-normal text-base">({{ candidate.age }})</span>{% endif %}</h1>
+      <div class="flex items-center gap-2 mt-1">
+        <span id="status-badge-{{ candidate.id }}" class="status-badge status-{{ candidate.status }}">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(candidate.status, candidate.status) }}</span>
+        {% if candidate.email %}<span class="text-sm text-gray-400">{{ candidate.email }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Action row -->
+  <div class="flex items-center justify-between mb-6 pb-5 border-b border-gray-800">
+    <div class="flex gap-2">
+      {% if candidate.status not in ('interview', 'offer', 'hired') %}
+      <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-post="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-target="#status-badge-{{ candidate.id }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(event.detail.successful) { tdActivateStatusBtn('interview'); this.closest('form').remove(); }">
+        <input type="hidden" name="status" value="interview" />
+        <button type="submit" class="text-xs font-semibold text-green-400 hover:text-green-300 px-3 py-1.5 rounded-lg border border-green-900 hover:border-green-700 transition-colors tracking-wide">RECOMMEND</button>
+      </form>
+      {% endif %}
+    </div>
+    <div id="eval-action-{{ candidate.id }}">
+      {% if is_eval_pending %}
+      <div hx-get="{{ prefix }}/candidates/{{ candidate.id }}/evaluation/status" hx-trigger="every 2s" hx-swap="outerHTML"
+           class="flex items-center gap-2 text-sm text-yellow-400 py-1">
+        <span class="animate-spin inline-block">&#9851;</span>
+        <span>AI evaluation in progress...</span>
+      </div>
+      {% elif not eval_up_to_date %}
+      <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/evaluate"
+            hx-post="{{ prefix }}/candidates/{{ candidate.id }}/evaluate"
+            hx-target="#eval-action-{{ candidate.id }}" hx-swap="outerHTML">
+        <button type="submit" class="text-sm bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">&#9654; Reevaluate</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Candidate info -->
+  <section class="mb-6">
+    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Candidate Information</h3>
+    <div class="grid grid-cols-4 gap-4 bg-gray-800/40 rounded-xl p-4">
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Name</div>
+        <div class="text-sm text-white">{{ candidate.last_name or '—' }}{% if candidate.first_name %} {{ candidate.first_name }}{% endif %}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Email</div>
+        <div class="text-sm text-white break-all">{{ candidate.email or '—' }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</div>
+        <div class="text-sm text-white">{{ candidate.phone or '—' }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Ref. No.</div>
+        <div class="text-sm text-white">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Documents -->
+  <section class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Candidate Documents</h3>
+      <label class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg cursor-pointer border border-gray-700 transition-colors">
+        + Add Document
+        <input type="file" class="hidden" id="file-input-{{ candidate.id }}" multiple onchange="handleFileInput(this, {{ candidate.id }})" />
+      </label>
+    </div>
+    <div id="upload-status-{{ candidate.id }}" class="text-xs text-gray-400 mb-2"></div>
+    <div id="dropzone" class="border-2 border-dashed border-gray-800 rounded-xl p-4 text-center mb-3 transition-colors hover:border-gray-600 cursor-pointer"
+         ondragover="event.preventDefault(); this.classList.add('border-sky-500')"
+         ondragleave="this.classList.remove('border-sky-500')"
+         ondrop="handleDrop(event, {{ candidate.id }})">
+      <p class="text-xs text-gray-600">Drag files here or click above to select — PDF, DOC, DOCX, TXT, MD (max {{ config.max_upload_size_mb }} MB)</p>
+    </div>
+    <div class="space-y-2" id="doc-list-{{ candidate.id }}">
+      {% for doc in docs %}
+      <div class="flex items-center justify-between bg-gray-800 rounded-lg px-4 py-2.5">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-xs font-semibold bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded uppercase flex-shrink-0">{{ doc.doc_type }}</span>
+          <span class="text-sm text-gray-200 truncate">{{ doc.original_name }}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-shrink-0 ml-3">
+          <span class="text-xs text-gray-500">{{ doc.file_size_kb }} KB</span>
+          <a href="{{ prefix }}/documents/{{ doc.id }}/view" target="_blank" class="text-xs text-sky-400 hover:text-sky-300">View</a>
+          <form method="post" action="{{ prefix }}/documents/{{ doc.id }}/delete"
+                hx-post="{{ prefix }}/documents/{{ doc.id }}/delete"
+                hx-target="closest div" hx-swap="outerHTML"
+                onsubmit="return confirm('Are you sure you want to delete this?')">
+            <button type="submit" class="text-gray-600 hover:text-red-400 text-lg leading-none">&times;</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+      {% if not docs %}
+      <p class="text-xs text-gray-600 text-center py-3">No documents.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- AI Evaluation -->
+  <section class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">AI Evaluation</h3>
+      {% if current_eval %}
+      <span class="text-xs text-gray-600">{{ current_eval.model_used or '' }}{% if current_eval.ai_rating %} · {{ '%.1f' | format(current_eval.ai_rating) }}{% endif %}</span>
+      {% endif %}
+    </div>
+
+    {% if current_eval %}
+    <p class="text-sm text-gray-300 leading-relaxed mb-5">{{ current_eval.ai_summary }}</p>
+
+    <div class="grid grid-cols-3 gap-5 mb-6">
+      <div>
+        <h4 class="text-xs font-semibold text-green-400 uppercase tracking-wide mb-2">&#10003; Strengths</h4>
+        <ul class="space-y-1.5">
+          {% if current_eval.ai_strengths %}
+          {% for s in (current_eval.ai_strengths | fromjson) %}
+          <li class="text-xs text-gray-300 flex gap-1.5"><span class="text-green-500 flex-shrink-0 mt-0.5">•</span>{{ s }}</li>
+          {% endfor %}
+          {% endif %}
+        </ul>
+      </div>
+      <div>
+        <h4 class="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-2">&#9651; Gaps</h4>
+        <ul class="space-y-1.5">
+          {% if current_eval.ai_missing_tags %}
+          {% for tag in (current_eval.ai_missing_tags | fromjson) %}
+          <li class="text-xs text-gray-300 flex gap-1.5"><span class="text-yellow-500 flex-shrink-0 mt-0.5">•</span>{{ tag }}</li>
+          {% endfor %}
+          {% endif %}
+        </ul>
+      </div>
+      <div>
+        <h4 class="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2">&#9651; Red flags</h4>
+        <ul class="space-y-1.5">
+          {% if current_eval.ai_red_flags %}
+          {% for rf in (current_eval.ai_red_flags | fromjson) %}
+          <li class="text-xs text-gray-300 flex gap-1.5"><span class="text-red-500 flex-shrink-0 mt-0.5">•</span>{{ rf }}</li>
+          {% endfor %}
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+
+    {% if skill_ratings %}
+    <div>
+      <div class="flex items-baseline justify-between mb-3">
+        <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Must-have Criteria</h4>
+        <div class="flex items-baseline gap-3">
+          {% if ai_skill_avg is not none %}
+          <span class="text-xs text-yellow-500">AI avg: {{ '%.1f' | format(ai_skill_avg) }}</span>
+          {% endif %}
+          <span class="text-base font-bold text-sky-400">You avg: <span id="user-skill-avg">{{ '%.1f' | format(user_skill_avg) if user_skill_avg is not none else '—' }}</span></span>
+        </div>
+      </div>
+      <div class="space-y-4">
+        {% for sr in skill_ratings %}
+        {% set ai_bar = 'bg-rose-500' %}
+        {% set ai_txt = 'text-rose-400' %}
+        {% set ai_pct = (sr.rating / 10 * 100) | int %}
+        {% set u_val = skill_user_ratings.get(sr.skill, 0) %}
+        {% set u_pct = (u_val / 10 * 100) | int %}
+        <div>
+          <div class="flex items-baseline justify-between mb-1.5">
+            <span class="text-sm font-medium text-gray-200">{{ sr.skill }}</span>
+            <div class="flex items-baseline gap-3">
+              <span class="{{ ai_txt }} text-xs">AI {{ '%.1f' | format(sr.rating) }}/10</span>
+              <span class="text-sky-400 text-xs font-semibold">You <span id="ur-val-{{ loop.index }}">{{ '%.1f' | format(u_val) if u_val else '—' }}</span></span>
+            </div>
+          </div>
+          <div class="bg-gray-800 rounded-full h-2 mb-1.5">
+            <div class="{{ ai_bar }} h-2 rounded-full" style="width: {{ ai_pct }}%"></div>
+          </div>
+          <div class="relative h-2 mb-1">
+            <div class="bg-gray-800 rounded-full h-2 absolute inset-0"></div>
+            <div id="ur-bar-{{ loop.index }}" class="bg-sky-600 h-2 rounded-full absolute left-0 top-0 pointer-events-none" style="width: {{ u_pct }}%"></div>
+            <input type="range" min="0" max="10" step="0.5"
+                   value="{{ '%.1f' | format(u_val) }}"
+                   data-set="{{ 'true' if u_val > 0 else 'false' }}"
+                   data-candidate="{{ candidate.id }}"
+                   data-field="skill_rating:{{ sr.skill }}"
+                   data-idx="{{ loop.index }}"
+                   class="skill-range absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                   oninput="tdSkillInput(this)"
+                   onchange="tdSkillSave(this)">
+          </div>
+          {% if sr.evidence %}
+          <p class="text-xs text-gray-500 mt-1">{{ sr.evidence }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        <!-- Personal Impression -->
+        {% set pi_pct = ((pi_rating or 0) / 10 * 100) | int %}
+        <div class="pt-3 border-t border-gray-800">
+          <div class="flex items-baseline justify-between mb-1.5">
+            <span class="text-sm font-medium text-gray-200">Personal Impression</span>
+            <span class="text-sky-400 text-xs font-semibold">You <span id="pi-val">{{ '%.1f' | format(pi_rating) if pi_rating else '—' }}</span></span>
+          </div>
+          <div class="relative h-2 mb-2">
+            <div class="bg-gray-800 rounded-full h-2 absolute inset-0"></div>
+            <div id="pi-bar" class="bg-sky-600 h-2 rounded-full absolute left-0 top-0 pointer-events-none" style="width: {{ pi_pct }}%"></div>
+            <input type="range" min="0" max="10" step="0.5"
+                   value="{{ '%.1f' | format(pi_rating) if pi_rating else '0' }}"
+                   data-set="{{ 'true' if pi_rating else 'false' }}"
+                   data-candidate="{{ candidate.id }}"
+                   id="pi-range"
+                   class="skill-range absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                   oninput="document.getElementById('pi-bar').style.width=(this.value/10*100)+'%';document.getElementById('pi-val').textContent=parseFloat(this.value).toFixed(1);this.dataset.set='true';tdUpdateAvg();"
+                   onchange="tdPiSave()">
+          </div>
+          <input type="text" id="pi-note"
+                 value="{{ pi_note or '' }}"
+                 placeholder="Short note..."
+                 maxlength="200"
+                 class="w-full bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-lg border border-gray-700 focus:outline-none focus:border-sky-600 placeholder-gray-600"
+                 onblur="tdPiSave()">
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if user.role == 'admin' and current_eval.ai_current_salary %}
+    <div class="mt-4 text-xs text-gray-600 pt-3 border-t border-gray-800">
+      Salary (AI): {{ current_eval.ai_current_salary | int }} / Expected: {{ current_eval.ai_expected_salary | int if current_eval.ai_expected_salary else '?' }}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-8 text-gray-500">
+      <p class="text-sm">Candidate has not been evaluated yet. Upload documents and start evaluation.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- Status management -->
+  <section class="pt-5 border-t border-gray-800 mb-4">
+    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Change Status</h3>
+    <div class="flex gap-2 flex-wrap">
+      {% for s in statuses %}
+      <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-post="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-target="#status-badge-{{ candidate.id }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(event.detail.successful) tdActivateStatusBtn('{{ s }}')">
+        <input type="hidden" name="status" value="{{ s }}" />
+        <button type="submit" data-status="{{ s }}" class="status-btn text-xs px-3 py-1.5 rounded-lg border transition-colors {% if candidate.status == s %}border-sky-500 bg-sky-900 text-sky-300{% else %}border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-500{% endif %}">
+          {{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(s, s) }}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Overrides -->
+  {% if current_eval and current_eval.overrides %}
+  <section class="pt-5 border-t border-gray-800">
+    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">My Overrides</h3>
+    <div class="space-y-2">
+      {% for ov in current_eval.overrides %}
+      <div class="bg-gray-800 rounded-lg px-4 py-3">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-xs font-mono text-gray-400">{{ ov.field_key }}</span>
+            <div class="mt-1 flex items-center gap-3">
+              <span class="text-xs text-gray-500">AI: {{ ov.ai_value }}</span>
+              <span class="text-xs text-white font-semibold">&#8594; Mine: {{ ov.user_value }}</span>
+            </div>
+            {% if ov.override_note %}<p class="text-xs text-gray-500 mt-1">{{ ov.override_note }}</p>{% endif %}
+          </div>
+          <span class="text-xs text-gray-600">{{ ov.overridden_at.strftime('%d.%m. %H:%M') }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function uploadFile(file, candidateId, statusEl) {
+  if (!file) return 'skip';
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['pdf','doc','docx','txt','md'].includes(ext)) {
+    statusEl.textContent = 'Unsupported format: ' + ext + '. Supported: PDF, DOC, DOCX, TXT, MD';
+    return 'error';
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('doc_type', 'cv');
+  statusEl.textContent = 'Uploading ' + file.name + '...';
+  try {
+    const resp = await fetch(PREFIX + '/candidates/' + candidateId + '/documents', {method: 'POST', body: formData});
+    if (resp.ok) {
+      statusEl.textContent = 'Uploaded: ' + file.name;
+      return 'ok';
+    } else if (resp.status === 409) {
+      statusEl.textContent = 'File already uploaded: ' + file.name;
+      return 'dup';
+    } else {
+      statusEl.textContent = 'Upload error (' + resp.status + '): ' + file.name;
+      return 'error';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Connection error.';
+    return 'error';
+  }
+}
+async function _triggerEvalAfterUpload(candidateId, statusEl) {
+  statusEl.textContent = 'Refreshing...';
+  window.location.reload();
+}
+async function handleDrop(event, candidateId) {
+  event.preventDefault();
+  document.getElementById('dropzone').classList.remove('border-sky-500');
+  const statusEl = document.getElementById('upload-status-' + candidateId);
+  const files = [...event.dataTransfer.files];
+  let uploaded = 0;
+  for (const file of files) {
+    const result = await uploadFile(file, candidateId, statusEl);
+    if (result === 'ok') uploaded++;
+  }
+  window.location.reload();
+}
+async function handleFileInput(input, candidateId) {
+  const statusEl = document.getElementById('upload-status-' + candidateId);
+  const files = [...input.files];
+  input.value = '';
+  let uploaded = 0;
+  for (const file of files) {
+    const result = await uploadFile(file, candidateId, statusEl);
+    if (result === 'ok') uploaded++;
+  }
+  window.location.reload();
+}
+
+function tdActivateStatusBtn(newStatus) {
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    const active = btn.dataset.status === newStatus;
+    btn.classList.toggle('border-sky-500', active);
+    btn.classList.toggle('bg-sky-900', active);
+    btn.classList.toggle('text-sky-300', active);
+    btn.classList.toggle('border-gray-700', !active);
+    btn.classList.toggle('bg-gray-800', !active);
+    btn.classList.toggle('text-gray-400', !active);
+  });
+}
+
+function tdUpdateAvg() {
+  const set = document.querySelectorAll('.skill-range[data-set="true"]');
+  const avgEl = document.getElementById('user-skill-avg');
+  if (!avgEl) return;
+  avgEl.textContent = set.length
+    ? (Array.from(set).reduce((s, el) => s + parseFloat(el.value), 0) / set.length).toFixed(1)
+    : '—';
+}
+
+function tdSkillInput(input) {
+  const idx = input.dataset.idx;
+  document.getElementById('ur-bar-' + idx).style.width = (input.value / 10 * 100) + '%';
+  document.getElementById('ur-val-' + idx).textContent = parseFloat(input.value).toFixed(1);
+  input.dataset.set = 'true';
+  tdUpdateAvg();
+}
+
+function tdSkillSave(input) {
+  const cid = input.dataset.candidate;
+  htmx.ajax('POST', PREFIX + '/candidates/' + cid + '/evaluation/override', {
+    values: { field_key: input.dataset.field, user_value: parseFloat(input.value).toFixed(1) },
+    swap: 'none'
+  });
+}
+
+function tdPiSave() {
+  const range = document.getElementById('pi-range');
+  const cid = range.dataset.candidate;
+  htmx.ajax('POST', PREFIX + '/candidates/' + cid + '/evaluation/override', {
+    values: { field_key: 'personal_impression', user_value: parseFloat(range.value).toFixed(1), override_note: document.getElementById('pi-note').value },
+    swap: 'none'
+  });
+}
+</script>
+{% endblock %}

@@ -46,31 +46,6 @@
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Global modal overlay -->
-  <div id="modal-overlay" class="hidden fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4"
-       onclick="if(event.target===this)closeModal()">
-    <div id="modal-content" class="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-700">
-    </div>
-  </div>
-
-  <script>
-    function openModal(candidateId) {
-      const overlay = document.getElementById('modal-overlay');
-      const content = document.getElementById('modal-content');
-      content.innerHTML = '<div class="flex items-center justify-center py-20"><span class="text-gray-400 text-sm animate-pulse">Loading...</span></div>';
-      overlay.classList.remove('hidden');
-      htmx.ajax('GET', PREFIX + '/candidates/' + candidateId + '/modal', {target: '#modal-content', swap: 'innerHTML'});
-    }
-    function closeModal() {
-      document.getElementById('modal-overlay').classList.add('hidden');
-    }
-    document.body.addEventListener('htmx:responseError', function(evt) {
-      if (evt.detail.target && evt.detail.target.id === 'modal-content') {
-        evt.detail.target.innerHTML = '<div class="p-8 text-center"><p class="text-red-400 text-sm mb-4">Failed to load (HTTP ' + evt.detail.xhr.status + ').</p><button onclick="closeModal()" class="text-xs text-gray-400 hover:text-gray-200">Close</button></div>';
-      }
-    });
-  </script>
-
   {% block scripts %}{% endblock %}
 </body>
 </html>

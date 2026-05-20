@@ -49,70 +49,12 @@ def create_candidate(
 
 @router.get("/{candidate_id}/modal")
 def candidate_modal(candidate_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    candidate = _get_candidate_or_404(candidate_id, db)
-    _check_access(candidate.recruitment_id, current_user, db)
-    current_eval = next((e for e in candidate.evaluations if e.is_current), None)
-    overrides = {}
-    if current_eval:
-        for ov in current_eval.overrides:
-            overrides[ov.field_key] = ov.user_value
-    skill_ratings = []
-    if current_eval and current_eval.ai_output_json:
-        try:
-            ai_data = json.loads(current_eval.ai_output_json)
-            skill_ratings = ai_data.get("skill_ratings", [])
-        except Exception:
-            pass
-    docs = [d for d in candidate.documents if not d.is_deleted]
+    return templates.TemplateResponse(request, "candidates/card_modal.html", _candidate_ctx(candidate_id, db, current_user))
 
-    active_docs = [d for d in candidate.documents if not d.is_deleted and d.extracted_text]
-    docs_hash = compute_documents_hash([d.sha256_hash for d in active_docs]) if active_docs else ""
-    eval_up_to_date = bool(current_eval and current_eval.documents_hash == docs_hash)
 
-    skill_user_ratings: dict[str, float] = {}
-    pi_rating: float | None = None
-    pi_note: str | None = None
-    if current_eval:
-        for ov in current_eval.overrides:
-            if ov.field_key.startswith("skill_rating:"):
-                skill_name = ov.field_key[len("skill_rating:"):]
-                try:
-                    skill_user_ratings[skill_name] = float(ov.user_value)
-                except ValueError:
-                    pass
-            elif ov.field_key == "personal_impression":
-                try:
-                    pi_rating = float(ov.user_value)
-                    pi_note = ov.override_note
-                except ValueError:
-                    pass
-
-    ai_skill_avg = (sum(sr["rating"] for sr in skill_ratings) / len(skill_ratings)) if skill_ratings else None
-    all_user_vals = list(skill_user_ratings.values()) + ([pi_rating] if pi_rating else [])
-    user_skill_avg = (sum(all_user_vals) / len(all_user_vals)) if all_user_vals else None
-
-    is_eval_pending = _EVAL_STATUS.get(candidate_id) == "pending"
-
-    return templates.TemplateResponse(
-        request,
-        "candidates/card_modal.html",
-        {
-            "candidate": candidate,
-            "current_eval": current_eval,
-            "overrides": overrides,
-            "skill_ratings": skill_ratings,
-            "docs": docs,
-            "user": current_user,
-            "statuses": VALID_STATUSES,
-            "eval_up_to_date": eval_up_to_date,
-            "is_eval_pending": is_eval_pending,
-            "skill_user_ratings": skill_user_ratings,
-            "ai_skill_avg": ai_skill_avg,
-            "user_skill_avg": user_skill_avg,
-            "pi_rating": pi_rating,
-            "pi_note": pi_note,
-        },
-    )
+@router.get("/{candidate_id}")
+def candidate_detail(candidate_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return templates.TemplateResponse(request, "candidates/detail.html", _candidate_ctx(candidate_id, db, current_user))
 
 
 @router.get("/{candidate_id}/card")
@@ -211,6 +153,63 @@ def delete_candidate(
     db.commit()
     write_audit(db, current_user.id, "delete_candidate", "candidate", candidate_id)
     return RedirectResponse(url=f"{settings.proxy_prefix}/recruitments/{recruitment_id}", status_code=302)
+
+
+def _candidate_ctx(candidate_id: int, db: Session, current_user: User) -> dict:
+    candidate = _get_candidate_or_404(candidate_id, db)
+    _check_access(candidate.recruitment_id, current_user, db)
+    current_eval = next((e for e in candidate.evaluations if e.is_current), None)
+    overrides = {}
+    if current_eval:
+        for ov in current_eval.overrides:
+            overrides[ov.field_key] = ov.user_value
+    skill_ratings = []
+    if current_eval and current_eval.ai_output_json:
+        try:
+            ai_data = json.loads(current_eval.ai_output_json)
+            skill_ratings = ai_data.get("skill_ratings", [])
+        except Exception:
+            pass
+    docs = [d for d in candidate.documents if not d.is_deleted]
+    active_docs = [d for d in candidate.documents if not d.is_deleted and d.extracted_text]
+    docs_hash = compute_documents_hash([d.sha256_hash for d in active_docs]) if active_docs else ""
+    eval_up_to_date = bool(current_eval and current_eval.documents_hash == docs_hash)
+    skill_user_ratings: dict[str, float] = {}
+    pi_rating: float | None = None
+    pi_note: str | None = None
+    if current_eval:
+        for ov in current_eval.overrides:
+            if ov.field_key.startswith("skill_rating:"):
+                skill_name = ov.field_key[len("skill_rating:"):]
+                try:
+                    skill_user_ratings[skill_name] = float(ov.user_value)
+                except ValueError:
+                    pass
+            elif ov.field_key == "personal_impression":
+                try:
+                    pi_rating = float(ov.user_value)
+                    pi_note = ov.override_note
+                except ValueError:
+                    pass
+    ai_skill_avg = (sum(sr["rating"] for sr in skill_ratings) / len(skill_ratings)) if skill_ratings else None
+    all_user_vals = list(skill_user_ratings.values()) + ([pi_rating] if pi_rating else [])
+    user_skill_avg = (sum(all_user_vals) / len(all_user_vals)) if all_user_vals else None
+    return {
+        "candidate": candidate,
+        "current_eval": current_eval,
+        "overrides": overrides,
+        "skill_ratings": skill_ratings,
+        "docs": docs,
+        "user": current_user,
+        "statuses": VALID_STATUSES,
+        "eval_up_to_date": eval_up_to_date,
+        "is_eval_pending": _EVAL_STATUS.get(candidate_id) == "pending",
+        "skill_user_ratings": skill_user_ratings,
+        "ai_skill_avg": ai_skill_avg,
+        "user_skill_avg": user_skill_avg,
+        "pi_rating": pi_rating,
+        "pi_note": pi_note,
+    }
 
 
 def _get_candidate_or_404(candidate_id: int, db: Session) -> Candidate:

@@ -1,6 +1,7 @@
 logs/
 log/
 test docs/
+data/
 __pycache__/
 *.pyc
 *.pyo

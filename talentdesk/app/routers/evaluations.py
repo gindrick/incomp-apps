@@ -103,11 +103,7 @@ def evaluation_status(candidate_id: int, current_user: User = Depends(get_curren
         _EVAL_STATUS.pop(candidate_id, None)
         return HTMLResponse('<div class="text-sm text-red-400">Evaluation failed. Please try again.</div>')
     _EVAL_STATUS.pop(candidate_id, None)
-    return HTMLResponse(
-        f'<div hx-get="{pfx}/candidates/{candidate_id}/modal" hx-trigger="load" hx-target="#modal-content"></div>'
-        f'<div id="candidate-{candidate_id}" hx-swap-oob="true"'
-        f' hx-get="{pfx}/candidates/{candidate_id}/card" hx-trigger="load" hx-swap="outerHTML"></div>'
-    )
+    return HTMLResponse('<div><script>window.location.reload();</script></div>')
 
 
 @router.post("/candidates/{candidate_id}/evaluation/override")
