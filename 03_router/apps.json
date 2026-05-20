@@ -52,5 +52,11 @@
     "target": "http://localhost:8013",
     "strip_prefix": true,
     "description": "Spotter — Competitor Social Media Monitor"
+  },
+  {
+    "path": "talentdesk",
+    "target": "http://localhost:9014",
+    "strip_prefix": true,
+    "description": "TalentDesk — Recruitment & Candidate Evaluation"
   }
 ]

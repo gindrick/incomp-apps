@@ -1,0 +1,1 @@
+pokud zakladam noveho uzivatele, tak nechci predvyplnovat jmeno, projemni atd...Stci aby se zobrazil jen drag and drop box, do ktereho vlozim dokumentz, za kterych LLM yto informace ziska vrati ve structured ouput definovane class

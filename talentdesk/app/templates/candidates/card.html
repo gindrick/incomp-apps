@@ -1,0 +1,97 @@
+{% set _rec = current_eval.ai_recommendation if current_eval else none %}
+{% set _pending = is_pending or (c.needs_reevaluation and not current_eval) %}
+
+{% if _pending %}
+<div id="candidate-{{ c.id }}"
+     hx-get="{{ prefix }}/candidates/{{ c.id }}/card"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3">
+  <div class="flex items-center gap-2">
+    <span class="text-xs text-yellow-400 animate-pulse">⟳ Evaluating...</span>
+    <span class="text-sm text-gray-400">{{ c.last_name or '' }} {{ c.first_name or '' }}</span>
+  </div>
+  <div class="h-2 bg-gray-800 rounded animate-pulse w-3/4"></div>
+  <div class="h-2 bg-gray-800 rounded animate-pulse w-1/2"></div>
+</div>
+
+{% elif current_eval %}
+<div id="candidate-{{ c.id }}"
+     class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3 hover:border-gray-600 transition-colors cursor-pointer"
+     onclick="openModal({{ c.id }})">
+
+  <!-- Badge + score -->
+  <div class="flex items-center justify-between">
+    <span class="text-xs font-bold px-2.5 py-1 rounded-full
+      {% if _rec == 'DOPORUCIT' %}bg-green-900 text-green-300
+      {% elif _rec == 'NEDOPORUCIT' %}bg-red-950 text-red-400
+      {% else %}bg-yellow-900 text-yellow-300{% endif %}">
+      {% if _rec == 'DOPORUCIT' %}★ Recommend
+      {% elif _rec == 'NEDOPORUCIT' %}✕ Not Suitable
+      {% else %}~ Consider{% endif %}
+    </span>
+    <div class="flex flex-col items-end">
+      <span class="text-xs text-yellow-500 leading-none">{{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
+      {% if user_skill_avg is not none %}
+      <span class="text-base font-bold text-sky-400 leading-tight">{{ '%.1f' | format(user_skill_avg) }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Name + current role -->
+  <div>
+    <p class="text-sm font-semibold text-white leading-snug">
+      {{ c.last_name or '—' }}{% if c.first_name %} {{ c.first_name }}{% endif %}{% if c.age %} <span class="text-gray-500 font-normal">({{ c.age }})</span>{% endif %}
+    </p>
+    {% if current_eval.ai_current_role %}
+    <p class="text-xs text-gray-500 mt-0.5">{{ current_eval.ai_current_role }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Skill tags -->
+  {% if current_eval.ai_skill_tags or current_eval.ai_missing_tags %}
+  <div class="flex flex-wrap gap-1">
+    {% if current_eval.ai_skill_tags %}
+    {% for tag in (current_eval.ai_skill_tags | fromjson) %}
+    <span class="text-xs bg-sky-950 text-sky-300 px-2 py-0.5 rounded-full">{{ tag }}</span>
+    {% endfor %}
+    {% endif %}
+    {% if current_eval.ai_missing_tags %}
+    {% for tag in (current_eval.ai_missing_tags | fromjson) %}
+    <span class="text-xs bg-red-950 text-red-400 px-2 py-0.5 rounded-full">−{{ tag }}</span>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Summary snippet -->
+  {% if current_eval.ai_summary %}
+  <p class="text-xs text-gray-400 leading-relaxed" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ current_eval.ai_summary }}</p>
+  {% endif %}
+
+  <!-- Footer -->
+  <div class="flex items-center justify-between pt-1 border-t border-gray-800 mt-auto">
+    <span class="status-badge status-{{ c.status }} text-xs">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
+    {% if user.role == 'admin' %}
+    <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/delete"
+          onsubmit="event.stopPropagation(); return confirm('Delete candidate {{ c.last_name }} {{ c.first_name }}?')">
+      <button type="submit" class="text-xs text-gray-600 hover:text-red-400 transition-colors">Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% else %}
+<div id="candidate-{{ c.id }}"
+     class="bg-gray-900 border border-dashed border-gray-700 rounded-xl p-4 flex flex-col gap-2 hover:border-gray-500 transition-colors cursor-pointer"
+     onclick="openModal({{ c.id }})">
+  <p class="text-sm font-semibold text-white">{{ c.last_name or '—' }}{% if c.first_name %} {{ c.first_name }}{% endif %}{% if c.age %} <span class="text-gray-500 font-normal">({{ c.age }})</span>{% endif %}</p>
+  <p class="text-xs text-gray-600">No evaluation — upload documents in the detail view</p>
+  {% if user.role == 'admin' %}
+  <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/delete"
+        onsubmit="event.stopPropagation(); return confirm('Delete candidate {{ c.last_name }} {{ c.first_name }}?')" class="mt-1">
+    <button type="submit" class="text-xs text-gray-600 hover:text-red-400 transition-colors">Delete</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

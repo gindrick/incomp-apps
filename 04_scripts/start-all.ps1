@@ -145,6 +145,17 @@ Start-Service-Background `
     -WorkDir "$root\mkt_spotter" `
     -Command "uv run python web/app.py"
 
+Import-EnvFile "$root\talentdesk\.env" -Force
+
+# Kill any existing process holding port 9014 so restarts are idempotent
+$p9014 = (Get-NetTCPConnection -LocalPort 9014 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p9014) { Stop-Process -Id $p9014 -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
+
+Start-Service-Background `
+    -Name "talentdesk" `
+    -WorkDir "$root\talentdesk" `
+    -Command "& '$root\talentdesk\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 9014"
+
 Write-Host ""
 Write-Host "Všechny služby spuštěny na pozadí (bez oken)."
 Write-Host ""
@@ -161,5 +172,6 @@ Write-Host "  5174 - Production Cards frontend (dev)"
 Write-Host "  8012 - Production Cards 2 backend"
 Write-Host "  5175 - Production Cards 2 frontend (dev)"
 Write-Host "  8013 - Spotter web UI"
+Write-Host "  9014 - TalentDesk"
 Write-Host ""
 Write-Host "Logy: $logDir\"

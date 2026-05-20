@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}{{ rec.title }} — TalentDesk{% endblock %}
+{% block content %}
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <div class="flex items-center gap-3 mb-1">
+      <a href="{{ prefix }}/recruitments" class="text-gray-500 hover:text-gray-300 text-sm">← Recruitments</a>
+      <span class="text-gray-700">|</span>
+      <span class="text-xs px-2 py-0.5 rounded-full {% if rec.status == 'active' %}bg-green-900 text-green-300{% elif rec.status == 'paused' %}bg-yellow-900 text-yellow-300{% else %}bg-gray-800 text-gray-400{% endif %}">
+        {{ {'active': 'Active', 'paused': 'Paused', 'closed': 'Closed'}.get(rec.status, rec.status) }}
+      </span>
+    </div>
+    <h1 class="text-2xl font-bold text-white">{{ rec.title }}</h1>
+    <p class="text-sm text-gray-400 mt-1">{{ rec.job_description.title }} — {{ rec.job_description.department or 'No Department' }}</p>
+  </div>
+</div>
+
+<!-- Add candidate via CV upload -->
+<div x-data="{open: false, staged: [], status: '', uploading: false}"
+     @candidate-added.window="open = false; staged = []; status = ''; uploading = false"
+     class="mb-6">
+  <button @click="open = !open" class="text-sm bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-lg transition-colors border border-gray-700">+ Add Candidate</button>
+  <div x-show="open" x-transition class="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <p class="text-xs text-gray-500 mb-3">Upload CV documents — contact info will be extracted automatically. You can add multiple files before creating.</p>
+
+    <!-- Drop zone -->
+    <div
+      class="border-2 border-dashed border-gray-700 rounded-xl p-6 text-center cursor-pointer transition-colors hover:border-gray-600"
+      :class="{'border-sky-500': false}"
+      @dragover.prevent="$el.classList.add('border-sky-500')"
+      @dragleave="$el.classList.remove('border-sky-500')"
+      @drop.prevent="
+        $el.classList.remove('border-sky-500');
+        Array.from($event.dataTransfer.files).forEach(f => { if (!staged.find(s => s.name === f.name)) staged.push(f) });
+      "
+    >
+      <svg class="mx-auto h-7 w-7 text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <p class="text-gray-400 text-sm">Drop files here or
+        <label for="file-create-{{ rec.id }}" class="text-sky-400 cursor-pointer underline ml-1">browse</label>
+      </p>
+      <input type="file" id="file-create-{{ rec.id }}" accept=".pdf,.doc,.docx,.txt,.md" class="hidden" multiple
+             @change="Array.from($event.target.files).forEach(f => { if (!staged.find(s => s.name === f.name)) staged.push(f) }); $event.target.value = ''">
+      <p class="text-xs text-gray-600 mt-1.5">PDF, DOC, DOCX, TXT, MD</p>
+    </div>
+
+    <!-- Staged file list -->
+    <template x-if="staged.length > 0">
+      <div class="mt-3 space-y-1">
+        <p class="text-xs text-gray-500 mb-1" x-text="staged.length + ' file(s) ready to upload'"></p>
+        <template x-for="(f, i) in staged" :key="i">
+          <div class="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-1.5">
+            <span class="text-xs text-gray-300 truncate" x-text="f.name"></span>
+            <button type="button" @click="staged.splice(i, 1)" class="text-gray-500 hover:text-red-400 text-xs ml-3 flex-shrink-0">✕</button>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-3 mt-4">
+      <button
+        type="button"
+        x-show="staged.length > 0"
+        :disabled="uploading"
+        @click="tdCreateCandidate({{ rec.id }}, $data)"
+        class="bg-sky-500 hover:bg-sky-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+        x-text="uploading ? 'Creating...' : 'Create Candidate'"
+      ></button>
+      <button type="button" @click="open = false; staged = []; status = ''" class="text-gray-500 hover:text-gray-300 text-sm">Cancel</button>
+    </div>
+    <p class="mt-2 text-xs min-h-[1rem]"
+       x-text="status"
+       :class="status.startsWith('Error') ? 'text-red-400' : 'text-yellow-400'"></p>
+  </div>
+</div>
+
+<!-- Filters & sort -->
+<form method="get" class="flex gap-3 mb-6 flex-wrap">
+  <select name="sort" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" onchange="this.form.submit()">
+    <option value="created_at_desc" {% if sort=='created_at_desc' %}selected{% endif %}>Newest</option>
+    <option value="last_name_asc" {% if sort=='last_name_asc' %}selected{% endif %}>Last Name A–Z</option>
+    <option value="last_name_desc" {% if sort=='last_name_desc' %}selected{% endif %}>Last Name Z–A</option>
+    <option value="rating_desc" {% if sort=='rating_desc' %}selected{% endif %}>Rating ↓</option>
+    <option value="rating_asc" {% if sort=='rating_asc' %}selected{% endif %}>Rating ↑</option>
+    <option value="status" {% if sort=='status' %}selected{% endif %}>Status</option>
+  </select>
+  <select name="status_filter" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none" onchange="this.form.submit()">
+    <option value="">All statuses</option>
+    <option value="new" {% if status_filter=='new' %}selected{% endif %}>New</option>
+    <option value="active" {% if status_filter=='active' %}selected{% endif %}>In Process</option>
+    <option value="interview" {% if status_filter=='interview' %}selected{% endif %}>Interview</option>
+    <option value="offer" {% if status_filter=='offer' %}selected{% endif %}>Offer</option>
+    <option value="hired" {% if status_filter=='hired' %}selected{% endif %}>Hired</option>
+    <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>Rejected</option>
+  </select>
+</form>
+
+<!-- Candidate cards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4" id="candidate-list">
+  {% for c in candidates %}
+  {% set current_eval = c.evaluations | selectattr('is_current') | first | default(none) %}
+  {% set is_pending = pending_ids and c.id in pending_ids %}
+
+  {% if is_pending %}
+  <!-- Pending / evaluating card with HTMX polling -->
+  <div id="candidate-{{ c.id }}"
+       hx-get="{{ prefix }}/candidates/{{ c.id }}/card"
+       hx-trigger="every 3s"
+       hx-swap="outerHTML"
+       class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3">
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-yellow-400 animate-pulse">⟳ Evaluating...</span>
+      <span class="text-sm text-gray-400">{{ c.last_name or '' }} {{ c.first_name or '' }}</span>
+    </div>
+    <div class="h-2 bg-gray-800 rounded animate-pulse w-3/4"></div>
+    <div class="h-2 bg-gray-800 rounded animate-pulse w-1/2"></div>
+    <div class="h-2 bg-gray-800 rounded animate-pulse w-2/3"></div>
+  </div>
+  {% else %}
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-colors cursor-pointer flex flex-col gap-3"
+       id="candidate-{{ c.id }}" onclick="openModal({{ c.id }})">
+
+    <!-- Header: recommendation badge + score -->
+    <div class="flex items-center justify-between">
+      {% if current_eval and current_eval.ai_recommendation %}
+      {% set rec_label = {'DOPORUCIT': '★ Recommend', 'ZVAZIT': '~ Consider', 'NEDOPORUCIT': '✕ Not Suitable'} %}
+      <span class="text-xs font-bold px-2.5 py-1 rounded-full
+        {% if current_eval.ai_recommendation == 'DOPORUCIT' %}bg-green-900 text-green-300
+        {% elif current_eval.ai_recommendation == 'NEDOPORUCIT' %}bg-red-950 text-red-400
+        {% else %}bg-yellow-900 text-yellow-300{% endif %}">
+        {{ rec_label.get(current_eval.ai_recommendation, '—') }}
+      </span>
+      {% else %}
+      <span class="status-badge status-{{ c.status }}">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
+      {% endif %}
+      {% if current_eval %}
+      <span class="text-yellow-400 font-bold text-sm">{{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
+      {% endif %}
+    </div>
+
+    <!-- Name + current role -->
+    <div>
+      <div class="font-bold text-white text-base leading-snug">
+        {{ c.last_name or '' }} {{ c.first_name or '' }}{% if c.age %} <span class="text-gray-500 font-normal text-sm">({{ c.age }})</span>{% endif %}
+      </div>
+      {% if current_eval and current_eval.ai_current_role %}
+      <div class="text-xs text-gray-500 mt-0.5">{{ current_eval.ai_current_role }}</div>
+      {% else %}
+      <div class="text-sm text-gray-400 mt-0.5">{{ rec.job_description.title }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Top 4 skill criteria with progress bars + dots -->
+    {% if current_eval and current_eval.ai_output_json %}
+    {% set ai_data = current_eval.ai_output_json | fromjson %}
+    {% if ai_data.skill_ratings %}
+    <div class="space-y-1.5">
+      {% for sr in ai_data.skill_ratings[:4] %}
+      {% set pct = (sr.rating / 10 * 100) | int %}
+      {% set bar_color = 'bg-green-600' if sr.rating >= 7 else ('bg-yellow-600' if sr.rating >= 4 else 'bg-red-700') %}
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-600 w-4 flex-shrink-0">{{ loop.index }}.</span>
+        <span class="text-xs text-gray-300 flex-1 min-w-0 truncate">{{ sr.skill }}</span>
+        <div class="w-16 flex-shrink-0 bg-gray-800 rounded-full h-1.5">
+          <div class="{{ bar_color }} h-1.5 rounded-full" style="width: {{ pct }}%"></div>
+        </div>
+        <div class="flex gap-0.5 flex-shrink-0">
+          <span class="w-2 h-2 rounded-full {{ bar_color if sr.rating >= 3 else 'bg-gray-700' }}"></span>
+          <span class="w-2 h-2 rounded-full {{ bar_color if sr.rating >= 6 else 'bg-gray-700' }}"></span>
+          <span class="w-2 h-2 rounded-full {{ bar_color if sr.rating >= 8.5 else 'bg-gray-700' }}"></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Skill tags -->
+    {% if current_eval %}
+    <div class="flex flex-wrap gap-1">
+      {% if current_eval.ai_skill_tags %}
+      {% for tag in (current_eval.ai_skill_tags | fromjson) %}
+      <span class="text-xs bg-gray-800 border border-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{{ tag }} ✓</span>
+      {% endfor %}
+      {% endif %}
+      {% if current_eval.ai_missing_tags %}
+      {% for tag in (current_eval.ai_missing_tags | fromjson)[:3] %}
+      <span class="text-xs bg-gray-900 border border-gray-800 text-gray-500 px-2 py-0.5 rounded-full">{{ tag }}</span>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Summary -->
+    {% if current_eval and current_eval.ai_summary %}
+    <p class="text-xs text-gray-500 leading-relaxed line-clamp-3">{{ current_eval.ai_summary }}</p>
+    {% endif %}
+
+    <!-- Footer: doc count + delete (stop propagation so card click doesn't fire) -->
+    <div class="flex items-center justify-between mt-auto pt-2 border-t border-gray-800" onclick="event.stopPropagation()">
+      <span class="text-xs text-gray-600">{{ c.documents | rejectattr('is_deleted') | list | length }} docs</span>
+      <div class="flex items-center gap-2">
+        {% if c.needs_reevaluation %}
+        <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/evaluate">
+          <button type="submit" class="text-xs bg-amber-900 hover:bg-amber-800 text-amber-300 px-2 py-1 rounded transition-colors">🔄 Evaluate</button>
+        </form>
+        {% endif %}
+        {% if user.role == 'admin' %}
+        <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/delete" onsubmit="return confirm('Delete candidate {{ c.last_name }} {{ c.first_name }}?')">
+          <button type="submit" class="text-xs text-red-600 hover:text-red-400 px-2 py-1 rounded transition-colors">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% if not candidates %}
+<div id="empty-state" class="text-center py-16 text-gray-500">
+  <p>No candidates in this recruitment.</p>
+</div>
+{% endif %}
+
+<!-- Access management (admin only) -->
+{% if user.role == 'admin' %}
+<div class="mt-10 border-t border-gray-800 pt-8">
+  <h2 class="text-lg font-semibold text-white mb-4">Campaign Access</h2>
+  <div class="flex gap-2 mb-4">
+    <form method="post" action="{{ prefix }}/recruitments/{{ rec.id }}/access" class="flex gap-2">
+      <select name="user_id" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none">
+        {% for u in all_users if u.id != user.id %}
+        <option value="{{ u.id }}">{{ u.display_name or u.username }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">Add Access</button>
+    </form>
+  </div>
+  {% for a in rec.access %}
+  <div class="flex items-center justify-between py-2 border-b border-gray-800">
+    <span class="text-sm text-gray-300">{{ a.user.display_name or a.user.username }}</span>
+    <form method="post" action="{{ prefix }}/recruitments/{{ rec.id }}/access/{{ a.user_id }}/delete">
+      <button type="submit" class="text-xs text-red-500 hover:text-red-400">Remove</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function tdCreateCandidate(recId, alpineData) {
+    if (!alpineData.staged.length) return;
+    alpineData.uploading = true;
+    alpineData.status = 'Uploading ' + alpineData.staged.length + ' file(s)...';
+
+    const fd = new FormData();
+    alpineData.staged.forEach(f => fd.append('files', f));
+
+    try {
+      const res = await fetch(PREFIX + '/candidates/recruitments/' + recId + '/upload-create', {
+        method: 'POST',
+        body: fd,
+      });
+      if (!res.ok) {
+        alpineData.status = 'Error: ' + (await res.text() || res.status);
+        alpineData.uploading = false;
+        return;
+      }
+      const html = await res.text();
+
+      const empty = document.getElementById('empty-state');
+      if (empty) empty.remove();
+
+      const list = document.getElementById('candidate-list');
+      list.insertAdjacentHTML('afterbegin', html);
+      htmx.process(list.firstElementChild);
+
+      window.dispatchEvent(new CustomEvent('candidate-added'));
+    } catch (e) {
+      alpineData.status = 'Upload failed. Please try again.';
+      alpineData.uploading = false;
+    }
+  }
+</script>
+{% endblock %}

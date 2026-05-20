@@ -1,0 +1,10 @@
+logs/
+log/
+test docs/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+*.db
+*.sqlite3

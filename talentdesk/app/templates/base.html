@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}TalentDesk{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111827'/%3E%3Cpath d='M14 20h36v4H14zM14 30h36v4H14zM14 40h22v4H14z' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script>const PREFIX = "{{ prefix }}";</script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .status-new      { background: #1e3a5f; color: #93c5fd; }
+    .status-active   { background: #1a3320; color: #86efac; }
+    .status-interview{ background: #2d2010; color: #fcd34d; }
+    .status-offer    { background: #2d1a3a; color: #d8b4fe; }
+    .status-hired    { background: #163320; color: #4ade80; }
+    .status-rejected { background: #3a1a1a; color: #fca5a5; }
+    .status-badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body class="h-full bg-gray-950 text-gray-100 font-sans">
+
+  <!-- Nav -->
+  <nav class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <a href="{{ prefix }}/recruitments" class="flex items-center gap-2 text-sky-400 font-bold text-lg">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        TalentDesk
+      </a>
+      <a href="{{ prefix }}/recruitments" class="text-sm text-gray-300 hover:text-white transition-colors">Recruitments</a>
+      {% if user.role == 'admin' %}
+      <a href="{{ prefix }}/job-descriptions" class="text-sm text-gray-300 hover:text-white transition-colors">Positions</a>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-4 text-sm text-gray-400">
+      <span>{{ user.display_name or user.username }}</span>
+      {% if user.role == 'admin' %}<span class="text-xs bg-sky-900 text-sky-300 px-2 py-0.5 rounded-full">Admin</span>{% endif %}
+      <a href="{{ prefix }}/logout" class="text-gray-500 hover:text-red-400 transition-colors">Logout</a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Global modal overlay -->
+  <div id="modal-overlay" class="hidden fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4"
+       onclick="if(event.target===this)closeModal()">
+    <div id="modal-content" class="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-700">
+    </div>
+  </div>
+
+  <script>
+    function openModal(candidateId) {
+      const overlay = document.getElementById('modal-overlay');
+      const content = document.getElementById('modal-content');
+      content.innerHTML = '<div class="flex items-center justify-center py-20"><span class="text-gray-400 text-sm animate-pulse">Loading...</span></div>';
+      overlay.classList.remove('hidden');
+      htmx.ajax('GET', PREFIX + '/candidates/' + candidateId + '/modal', {target: '#modal-content', swap: 'innerHTML'});
+    }
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.add('hidden');
+    }
+    document.body.addEventListener('htmx:responseError', function(evt) {
+      if (evt.detail.target && evt.detail.target.id === 'modal-content') {
+        evt.detail.target.innerHTML = '<div class="p-8 text-center"><p class="text-red-400 text-sm mb-4">Failed to load (HTTP ' + evt.detail.xhr.status + ').</p><button onclick="closeModal()" class="text-xs text-gray-400 hover:text-gray-200">Close</button></div>';
+      }
+    });
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
