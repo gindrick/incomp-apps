@@ -35,22 +35,22 @@ def _list_runs() -> list[dict]:
             profiles = data.get("profiles", [])
             counts: dict[str, int] = {}
             total_posts = 0
-            has_errors = False
             for p in profiles:
                 abbr = _PLATFORM_ABBR.get(p.get("platform", ""), "?")
                 counts[abbr] = counts.get(abbr, 0) + 1
                 total_posts += p.get("new_posts_count", 0)
-                if p.get("error"):
-                    has_errors = True
             parts = [f"{counts[a]} {a}" for a in _PLATFORM_ORDER if a in counts]
             parts += [f"{n} {a}" for a, n in counts.items() if a not in _PLATFORM_ORDER]
+            status = data.get("status") or (
+                "partial" if any(p.get("error") for p in profiles) else "success"
+            )
             runs.append({
                 "run_id": entry,
                 "run_at": data.get("run_at", entry),
                 "profile_count": len(profiles),
                 "total_posts": total_posts,
                 "platform_summary": " · ".join(parts),
-                "has_errors": has_errors,
+                "status": status,
             })
         except Exception:
             continue

@@ -32,6 +32,17 @@ def _profile_to_dict(result: ProfileResult, main_message: list[str]) -> dict:
     }
 
 
+def _run_status(results: list[ProfileResult]) -> str:
+    if not results:
+        return "failed"
+    errors = sum(1 for r in results if r.error)
+    if errors == 0:
+        return "success"
+    if errors == len(results):
+        return "failed"
+    return "partial"
+
+
 def save_run(
     run_dir: str,
     results: list[ProfileResult],
@@ -41,6 +52,7 @@ def save_run(
 
     data = {
         "run_at": datetime.now(timezone.utc).isoformat(),
+        "status": _run_status(results),
         "profiles": [
             _profile_to_dict(r, messages.get(r.profile, []))
             for r in results

@@ -7,14 +7,20 @@
 {% if runs %}
 <div class="run-list">
   {% for run in runs %}
-  <div class="run-card {% if run.has_errors %}run-card-error{% endif %}">
+  <div class="run-card {% if run.status == 'failed' %}run-card-error{% elif run.status == 'partial' %}run-card-partial{% endif %}">
     <div class="run-meta">
       <span class="run-date">{{ run.run_at | replace("T", " ") | truncate(16, True, "") }}</span>
       <div class="run-detail">
         <span class="run-breakdown">{{ run.platform_summary }}</span>
         <span class="run-sep">·</span>
         <span class="run-posts">{{ run.total_posts }} post{% if run.total_posts != 1 %}s{% endif %}</span>
-        {% if run.has_errors %}<span class="run-error-flag">errors</span>{% endif %}
+        {% if run.status == "success" %}
+          <span class="run-status-flag status-success">✓ OK</span>
+        {% elif run.status == "failed" %}
+          <span class="run-status-flag status-failed">✗ Failed</span>
+        {% else %}
+          <span class="run-status-flag status-partial">⚠ Partial</span>
+        {% endif %}
       </div>
     </div>
     <a href="{{ url_for('report', run_id=run.run_id) }}" class="btn">View Report</a>
