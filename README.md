@@ -75,6 +75,62 @@ All via the router at `http://localhost:8000`:
 
 ---
 
+## Monitoring & Teams Notifications
+
+A watchdog (`monitor.ps1`) runs every 2 minutes via Windows Scheduled Task. It checks each service, restarts any that are down, and sends a Teams alert if a restart fails. Spotter also posts a card when a new report is successfully generated.
+
+### What triggers a notification
+
+| Event | Card colour |
+|-------|-------------|
+| Service fails to restart after watchdog attempt | 🔴 Red alert |
+| Spotter run completes — all profiles scraped OK | 🟢 Green success |
+
+### Step 1 — Create a Teams Incoming Webhook
+
+1. Open the target Teams channel → **···** → **Connectors** → **Incoming Webhook** → **Configure**
+2. Give it a name (e.g. `JJA Monitor`) and click **Create**
+3. Copy the generated webhook URL
+
+### Step 2 — Paste the URL into monitor-config.ps1
+
+```powershell
+# C:\jja\04_scripts\monitor-config.ps1
+$TeamsWebhookUrl = "https://hranipexcom.webhook.office.com/webhookb2/..."
+```
+
+This is the single source of truth — both the watchdog (`monitor.ps1`) and Spotter (`notify-spotter.ps1`) read it from here.
+
+### Step 3 — Register the watchdog Scheduled Task
+
+Run once as Administrator:
+
+```powershell
+cd C:\jja
+.\04_scripts\register-monitor-task.ps1
+```
+
+This registers `JJA-Monitor` to fire every 2 minutes. Test immediately with:
+
+```powershell
+schtasks /run /tn JJA-Monitor
+```
+
+Logs are written to `C:\jja\logs\monitor.log`.
+
+### Optional — Spotter "View Report" link in the card
+
+Add `REPORT_BASE_URL` to `mkt_spotter\.env` so the Teams card includes a clickable link:
+
+```env
+# C:\jja\mkt_spotter\.env
+REPORT_BASE_URL=http://SERVER_IP/spotter
+```
+
+If omitted, the card still shows run ID, platforms, and post count — just without the link.
+
+---
+
 ## Configuration (.env)
 
 Configuration is layered — global keys at the root, project-specific values in each project:

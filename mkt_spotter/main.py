@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import math
 import os
+import subprocess
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -111,6 +114,35 @@ def _make_sample_post(platform: str, profile: str, idx: int, data: dict) -> Post
     )
 
 
+_NOTIFY_PS1 = r"C:\jja\04_scripts\notify-spotter.ps1"
+_PLATFORM_ABBR = {"facebook": "FB", "instagram": "IG", "linkedin": "LI"}
+
+
+def _notify_teams(run_id: str, results: list[ProfileResult]) -> None:
+    if not os.path.exists(_NOTIFY_PS1):
+        return
+    counts: dict[str, int] = {}
+    for r in results:
+        a = _PLATFORM_ABBR.get(r.platform, r.platform.upper()[:2])
+        counts[a] = counts.get(a, 0) + 1
+    platform_summary = " · ".join(f"{n} {a}" for a, n in counts.items())
+    total_posts = sum(r.new_posts_count for r in results)
+    base_url = os.environ.get("REPORT_BASE_URL", "").rstrip("/")
+    report_url = f"{base_url}/report/{run_id}" if base_url else ""
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NonInteractive", "-File", _NOTIFY_PS1,
+             "-RunId", run_id,
+             "-PlatformSummary", platform_summary,
+             "-TotalPosts", str(total_posts),
+             "-ReportUrl", report_url],
+            check=False, capture_output=True, timeout=15,
+        )
+        logger.info("Teams notification sent for run %s", run_id)
+    except Exception as exc:
+        logger.warning("Teams notification failed: %s", exc)
+
+
 def dry_run(config: dict) -> None:
     output_dir: str = config.get("output_dir", "reports")
     profiles: list[dict] = config.get("profiles", [])
@@ -155,6 +187,26 @@ def dry_run(config: dict) -> None:
 
     save_run(run_dir, results, messages)
     logger.info("Dry run complete. Open http://localhost:8013 to preview the report.")
+    _notify_teams(run_id, results)
+
+
+def _find_last_run_at(output_dir: str) -> datetime | None:
+    if not os.path.isdir(output_dir):
+        return None
+    for entry in sorted(os.listdir(output_dir), reverse=True):
+        if entry.endswith("_dry"):
+            continue
+        data_file = os.path.join(output_dir, entry, "data.json")
+        if not os.path.isfile(data_file):
+            continue
+        try:
+            with open(data_file, encoding="utf-8") as f:
+                ts = json.load(f).get("run_at")
+            if ts:
+                return datetime.fromisoformat(ts)
+        except Exception:
+            continue
+    return None
 
 
 SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
@@ -175,6 +227,14 @@ def run_scraper(config: dict) -> None:
     days_back: int = config.get("days_back", 7)
     headless: bool = config.get("headless", True)
     output_dir: str = config.get("output_dir", "reports")
+
+    last_run_at = _find_last_run_at(output_dir)
+    if last_run_at:
+        elapsed = datetime.now(timezone.utc) - last_run_at
+        days_back = max(1, math.ceil(elapsed.total_seconds() / 86400))
+        logger.info("Continuing from last run (%s) — fetching last %d day(s)", last_run_at.date(), days_back)
+    else:
+        logger.info("First run — fetching last %d days (config days_back)", days_back)
     screenshot_width: int = config.get("screenshot_width", 1280)
     profiles: list[dict] = config.get("profiles", [])
 
@@ -309,6 +369,8 @@ def run_scraper(config: dict) -> None:
 
     save_run(run_dir, results, messages)
     logger.info("Run complete. Report saved to %s", run_dir)
+    if results and not any(r.error for r in results):
+        _notify_teams(run_id, results)
 
 
 def main() -> None:
