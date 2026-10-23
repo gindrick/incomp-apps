@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user, require_admin, require_recruitment_access
 from app.db.connection import get_db
-from app.db.models import JobDescription, Recruitment, RecruitmentAccess, User
+from app.db.models import Department, JobDescription, Recruitment, RecruitmentAccess, User
 from app.routers.evaluations import _EVAL_STATUS
 from app.services.access_control import write_audit
 from app.templates_config import templates
@@ -31,8 +32,62 @@ def list_recruitments(request: Request, db: Session = Depends(get_db), current_u
 
 @router.get("/new")
 def new_recruitment_form(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    jds = db.query(JobDescription).filter_by(is_active=True).order_by(JobDescription.title).all()
-    return templates.TemplateResponse(request, "recruitments/create.html", {"jds": jds, "user": current_user})
+    departments = (
+        db.query(Department).order_by(Department.sort_order, Department.name).all()
+    )
+    active_jds = db.query(JobDescription).filter_by(is_active=True).order_by(JobDescription.title).all()
+
+    jds_by_dept: dict[int, list] = {}
+    unassigned = []
+    for jd in active_jds:
+        if jd.department_id:
+            jds_by_dept.setdefault(jd.department_id, []).append(jd)
+        else:
+            unassigned.append(jd)
+
+    dept_data = []
+    for dept in departments:
+        dept_jds = jds_by_dept.get(dept.id, [])
+        if not dept_jds:
+            continue
+        dept_data.append({
+            "id": dept.id,
+            "name": dept.name,
+            "icon": dept.icon or "📁",
+            "jds": [
+                {
+                    "id": jd.id,
+                    "title": jd.title,
+                    "salary_min": float(jd.salary_min) if jd.salary_min else None,
+                    "salary_max": float(jd.salary_max) if jd.salary_max else None,
+                    "currency": jd.currency or "CZK",
+                }
+                for jd in dept_jds
+            ],
+        })
+    if unassigned:
+        dept_data.append({
+            "id": 0,
+            "name": "Other",
+            "icon": "📋",
+            "jds": [
+                {
+                    "id": jd.id,
+                    "title": jd.title,
+                    "salary_min": float(jd.salary_min) if jd.salary_min else None,
+                    "salary_max": float(jd.salary_max) if jd.salary_max else None,
+                    "currency": jd.currency or "CZK",
+                }
+                for jd in unassigned
+            ],
+        })
+
+    departments_json = json.dumps(dept_data, ensure_ascii=False).replace("</", "<\\/")
+    return templates.TemplateResponse(
+        request,
+        "recruitments/create.html",
+        {"departments_json": departments_json, "user": current_user},
+    )
 
 
 @router.post("/new")
@@ -90,6 +145,7 @@ def get_recruitment(
             "sort": sort,
             "status_filter": status_filter,
             "pending_ids": {cid for cid, st in _EVAL_STATUS.items() if st == "pending"},
+            "user_skill_avgs": _compute_user_skill_avgs(candidates),
         },
     )
 
@@ -147,6 +203,24 @@ def _sorted_candidates(candidates, sort: str, status_filter: str):
     else:
         candidates = sorted(candidates, key=lambda c: c.created_at, reverse=True)
     return candidates
+
+
+def _compute_user_skill_avgs(candidates) -> dict[int, float | None]:
+    result: dict[int, float | None] = {}
+    for c in candidates:
+        current_eval = next((e for e in c.evaluations if e.is_current), None)
+        if not current_eval:
+            result[c.id] = None
+            continue
+        vals = []
+        for ov in current_eval.overrides:
+            if ov.field_key.startswith("skill_rating:") or ov.field_key == "personal_impression":
+                try:
+                    vals.append(float(ov.user_value))
+                except ValueError:
+                    pass
+        result[c.id] = sum(vals) / len(vals) if vals else None
+    return result
 
 
 def _candidate_rating(c) -> float:

@@ -1,0 +1,47 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+     id="doc-modal-overlay"
+     onclick="if(event.target.id==='doc-modal-overlay') document.getElementById('doc-modal').innerHTML=''">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-5xl flex flex-col" style="height:88vh">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 flex-shrink-0">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="text-xs font-semibold bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded uppercase flex-shrink-0">{{ doc.doc_type }}</span>
+        <span class="text-sm text-gray-200 font-medium truncate">{{ doc.original_name }}</span>
+        <span class="text-xs text-gray-500 flex-shrink-0">{{ doc.file_size_kb }} KB</span>
+      </div>
+      <div class="flex items-center gap-3 flex-shrink-0 ml-3">
+        <a href="{{ raw_url }}" target="_blank"
+           class="text-xs text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors">
+          Open in tab
+        </a>
+        <button onclick="document.getElementById('doc-modal').innerHTML=''"
+                class="text-gray-500 hover:text-red-400 text-xl leading-none transition-colors">&times;</button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    {% if doc.file_type == 'pdf' %}
+    <iframe id="td-pdf-frame" data-src="{{ raw_url }}"
+            class="flex-1 w-full rounded-b-xl" style="border:none; min-height:0;"></iframe>
+
+    {% elif doc.extracted_text %}
+    <div class="flex-1 overflow-auto p-6">
+      {% if doc.file_type == 'md' %}
+      <div id="doc-modal-md" class="max-w-3xl mx-auto text-sm text-gray-300 leading-relaxed"></div>
+      {% else %}
+      <pre class="max-w-3xl mx-auto text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words font-sans">{{ doc.extracted_text }}</pre>
+      {% endif %}
+    </div>
+
+    {% else %}
+    <div class="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500">
+      <svg class="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <p class="text-sm">Preview not available.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>

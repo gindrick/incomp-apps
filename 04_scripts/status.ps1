@@ -5,6 +5,7 @@ $services = @(
     @{ Name = "01-mcp";             Port = 8002; Desc = "MCP server" }
     @{ Name = "02-litellm";         Port = 4000; Desc = "LiteLLM proxy" }
     @{ Name = "03-router";          Port = 8000; Desc = "Router (vstupní bod)" }
+    @{ Name = "03-router-https";    Port = 8443; Desc = "Router HTTPS" }
     @{ Name = "react-assistant";    Port = 8001; Desc = "React Assistant web UI" }
     @{ Name = "hr-demo";            Port = 8003; Desc = "HR Demo" }
     @{ Name = "hr-hiring-backend";  Port = 8010; Desc = "HR Hiring backend" }
@@ -13,6 +14,9 @@ $services = @(
     @{ Name = "production-cards-frontend";   Port = 5174; Desc = "Production Cards frontend" }
     @{ Name = "spotter-web";                 Port = 8013; Desc = "Spotter web UI" }
     @{ Name = "talentdesk";                  Port = 9014; Desc = "TalentDesk" }
+    @{ Name = "feeder";                      Port = 8015; Desc = "Feeder XML Downloader" }
+    @{ Name = "hrx-university";              Port = 8016; Desc = "HRX University" }
+    @{ Name = "semafor";                     Port = 8017; Desc = "Semafor Provozu" }
 )
 
 # Načteme všechna naslouchající spojení jednou

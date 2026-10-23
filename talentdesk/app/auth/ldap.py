@@ -44,17 +44,16 @@ def _is_user_allowed(username: str) -> bool:
     return False
 
 
-def ldap_bind(username: str, password: str) -> bool:
+def ldap_bind(username: str, password: str) -> tuple[bool, list[str]]:
     if not username.strip() or not password:
-        return False
+        return False, []
     if not _is_user_allowed(username):
-        return False
+        return False, []
     if not settings.ldap_server or not settings.ldap_domain:
-        return False
+        return False, []
 
-    principal = username.strip()
-    if "@" not in principal:
-        principal = f"{principal}@{settings.ldap_domain}"
+    bare = username.strip().split("@")[0]
+    principal = bare if "@" in username.strip() else f"{bare}@{settings.ldap_domain}"
 
     try:
         from ldap3 import SIMPLE, Connection, Server
@@ -62,8 +61,26 @@ def ldap_bind(username: str, password: str) -> bool:
         server = Server(settings.ldap_server)
         conn = Connection(server, user=principal, password=password, authentication=SIMPLE)
         ok = conn.bind()
-        if ok:
-            conn.unbind()
-        return ok
+        if not ok:
+            return False, []
+
+        groups: list[str] = []
+        try:
+            search_base = ",".join(f"DC={p}" for p in settings.ldap_domain.split("."))
+            conn.search(
+                search_base=search_base,
+                search_filter=f"(sAMAccountName={bare})",
+                attributes=["memberOf"],
+            )
+            if conn.entries:
+                for dn in conn.entries[0]["memberOf"].values:
+                    first_part = str(dn).split(",")[0]
+                    if first_part.upper().startswith("CN="):
+                        groups.append(first_part[3:])
+        except Exception:
+            pass  # login still succeeds without group info
+
+        conn.unbind()
+        return True, groups
     except Exception:
-        return False
+        return False, []

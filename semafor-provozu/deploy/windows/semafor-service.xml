@@ -1,0 +1,30 @@
+<!-- WinSW 2.x konfigurace služby Semafor Provozu.
+     WinSW-x64.exe (https://github.com/winsw/winsw/releases, verze 2.12.0) přejmenuj na semafor-service.exe
+     a ulož vedle tohoto souboru (C:\apps\semafor\service\). Instalace: semafor-service.exe install -->
+<service>
+  <id>SemaforProvozu</id>
+  <name>Semafor Provozu</name>
+  <description>Semafor Provozu: interní tracker projektů a úkolů (FastAPI/uvicorn za IIS)</description>
+  <workingdirectory>C:\apps\semafor\app\backend</workingdirectory>
+  <env name="SEMAFOR_ENV_FILE" value="C:\apps\semafor\.env"/>
+  <env name="PYTHONUTF8" value="1"/>
+  <env name="PYTHONPATH" value="C:\apps\semafor\app\backend"/>
+  <executable>C:\apps\semafor\venv\Scripts\python.exe</executable>
+  <!-- jen localhost: ven aplikace jde výhradně přes IIS / směrování (HTTPS).
+       Jeden worker stačí pro desítky uživatelů; víc workerů je podporováno (stav je v databázi), na Windows ověřit. -->
+  <arguments>-m semafor serve --host 127.0.0.1 --port 8710 --workers 1 --forwarded-allow-ips 127.0.0.1</arguments>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>20 sec</stoptimeout>
+  <log mode="roll-by-size">
+    <logpath>C:\apps\semafor\logs</logpath>
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>10</keepFiles>
+  </log>
+  <!-- servisní účet: ideálně gMSA s přístupem do SQL Serveru (Windows autentizace) -->
+  <!-- <serviceaccount><username>HRANIPEX\svc-semafor$</username><allowservicelogon>true</allowservicelogon></serviceaccount> -->
+</service>

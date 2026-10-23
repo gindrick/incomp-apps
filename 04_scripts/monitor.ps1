@@ -27,6 +27,13 @@ $services = @(
         Command   = "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8000"
     }
     @{
+        Name      = "03-router-https"
+        Port      = 8443
+        HealthUrl = $null
+        WorkDir   = "$root\03_router"
+        Command   = "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8443 --ssl-certfile 'C:\wamp64\bin\apache\apache2.4.51\conf\key\cert.crt' --ssl-keyfile 'C:\wamp64\bin\apache\apache2.4.51\conf\key\decryptedPK.key'"
+    }
+    @{
         Name      = "02-litellm"
         Port      = 4000
         HealthUrl = $null
@@ -74,6 +81,27 @@ $services = @(
         HealthUrl = $null
         WorkDir   = "$root\production_cards_2\3_frontend"
         Command   = "& 'C:\tools\node20\node.exe' .\node_modules\vite\bin\vite.js --host 0.0.0.0 --port 5175"
+    }
+    @{
+        Name      = "feeder"
+        Port      = 8015
+        HealthUrl = "http://127.0.0.1:8015/health"
+        WorkDir   = "$root\feeder"
+        Command   = "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8015"
+    }
+    @{
+        Name      = "hrx-university"
+        Port      = 8016
+        HealthUrl = "http://127.0.0.1:8016/api/health"
+        WorkDir   = "$root\hrx_univerzity_v2"
+        Command   = "node apps\api\build\server-prod.mjs"
+    }
+    @{
+        Name      = "semafor"
+        Port      = 8017
+        HealthUrl = "http://127.0.0.1:8017/healthz"
+        WorkDir   = "$root\semafor-provozu"
+        Command   = "& '$root\semafor-provozu\backend\.venv\Scripts\python.exe' -m semafor serve --host 127.0.0.1 --port 8017"
     }
 )
 
@@ -148,7 +176,7 @@ function Send-Alert {
         Write-Log "Teams webhook není nakonfigurován — alert přeskočen" "WARNING"
         return
     }
-    $title = "🚨 JJA: $Name nefunguje"
+    $title = "🚨 App monitor (pap): $Name not working"
     $text  = "**Server:** $env:COMPUTERNAME  **Čas:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')<br>$Msg"
     $card  = @{
         "@type"    = "MessageCard"
@@ -159,9 +187,9 @@ function Send-Alert {
     } | ConvertTo-Json -Depth 5
     try {
         Invoke-RestMethod -Uri $TeamsWebhookUrl -Method Post -Body $card -ContentType "application/json" -ErrorAction Stop
-        Write-Log "Teams alert odeslán: $Name"
+        Write-Log "Teams alert sent: $Name"
     } catch {
-        Write-Log "Teams alert selhal: $_" "ERROR"
+        Write-Log "Teams alert failed`: $_" "ERROR"
     }
 }
 
@@ -175,23 +203,23 @@ $state = Load-State
 foreach ($svc in $services) {
     if (Test-ServiceUp -Svc $svc) { continue }
 
-    Write-Log "$($svc.Name) (port $($svc.Port)) neodpovídá — restartuji" "WARNING"
+    Write-Log "$($svc.Name) (port $($svc.Port)) not responding — restarting" "WARNING"
     Stop-Port -Port $svc.Port
     Start-Sleep -Seconds 2
     Start-Svc -Svc $svc
     Start-Sleep -Seconds $RestartWaitSec
 
     if (Test-ServiceUp -Svc $svc) {
-        Write-Log "$($svc.Name) úspěšně restartován" "INFO"
+        Write-Log "$($svc.Name) successfully restarted" "INFO"
         $state.Remove("ALERT_$($svc.Name)")
     } else {
-        Write-Log "$($svc.Name) RESTART SELHAL" "ERROR"
+        Write-Log "$($svc.Name) RESTART FAILED" "ERROR"
         $alertKey = "ALERT_$($svc.Name)"
         if (-not (In-Cooldown -Key $alertKey -State $state)) {
-            Send-Alert -Name $svc.Name -Message "Služba $($svc.Name) (port $($svc.Port)) nereaguje ani po restartu. Nutný ruční zásah."
+            Send-Alert -Name $svc.Name -Message "Service $($svc.Name) (port $($svc.Port)) is not responding even after restart. Manual intervention required."
             $state[$alertKey] = (Get-Date).ToString("o")
         } else {
-            Write-Log "$($svc.Name) — cooldown, alert nevysílám"
+            Write-Log "$($svc.Name) — cooldown, alert not sent"
         }
     }
 }

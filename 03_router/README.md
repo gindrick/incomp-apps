@@ -28,6 +28,10 @@ Přidejte záznam do `apps.json`:
 
 - `strip_prefix: true` — router odstraní prefix cesty před předáním požadavku (používá `hr_hiring_api`)
 - `strip_prefix: false` — cesta se předává beze změny
+- `stream: true` — odpověď se předává průběžně, jak přichází (Server-Sent Events, živé změny); bez něj router čeká na celou odpověď
+- `https_url: "https://erp.hranipex.net:8443"` — aplikace jen přes HTTPS: požadavek přes HTTP (port 8000) se přesměruje (307) na tuto adresu se stejnou cestou
+
+Router běží dvakrát se stejným kódem i `apps.json`: HTTP na **8000** a HTTPS na **8443** (certifikát `erp.hranipex.net` od HranipexCA, sdílený s Apache v `C:\wamp64\bin\apache\apache2.4.51\conf\key\`; Apache drží 80/443 a nemění se).
 
 ## Spuštění
 

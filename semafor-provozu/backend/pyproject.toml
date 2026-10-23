@@ -1,0 +1,25 @@
+[project]
+name = "semafor-provozu"
+version = "3.0.0"
+description = "Semafor Provozu: interní tracker projektů a úkolů operations (Hranipex)"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["semafor*"]
+
+[tool.setuptools.package-data]
+semafor = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+# B008: Depends()/File() ve výchozích hodnotách je idiom FastAPI
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E702", "E731", "E501"]

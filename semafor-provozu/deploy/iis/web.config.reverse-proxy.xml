@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VARIANTA A (doporučená): IIS jako reverse proxy na službu Semafor (Windows služba, 127.0.0.1:8710).
+     Umístění: fyzická složka IIS aplikace /semafor (např. C:\inetpub\semafor\web.config), soubor přejmenovat na web.config.
+     Předpoklady na serveru: URL Rewrite 2.1 + Application Request Routing 3.0 (ARR) s povoleným proxy,
+     a v ARR povolené serverové proměnné HTTP_X_FORWARDED_PROTO a HTTP_X_FORWARDED_HOST (viz docs/NASAZENI_WINDOWS_IIS.md). -->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="Semafor Provozu" stopProcessing="true">
+          <match url="(.*)" />
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_PROTO" value="https" />
+            <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
+          </serverVariables>
+          <!-- prefix /semafor se předává dál; aplikace funguje i bez něj -->
+          <action type="Rewrite" url="http://127.0.0.1:8710/semafor/{R:1}" appendQueryString="true" />
+        </rule>
+      </rules>
+    </rewrite>
+    <!-- živé změny (text/event-stream) se nesmí komprimovat ani bufferovat -->
+    <urlCompression doStaticCompression="false" doDynamicCompression="false" />
+    <security>
+      <requestFiltering>
+        <!-- přílohy do 20 MB + rezerva -->
+        <requestLimits maxAllowedContentLength="22020096" />
+      </requestFiltering>
+    </security>
+    <httpProtocol>
+      <customHeaders>
+        <remove name="X-Powered-By" />
+        <add name="Strict-Transport-Security" value="max-age=31536000" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>

@@ -37,21 +37,48 @@
       {% endif %}
     </div>
     <div id="eval-action-{{ candidate.id }}">
-      {% if is_eval_pending %}
+      {% if is_extract_pending %}
+      <div hx-get="{{ prefix }}/candidates/{{ candidate.id }}/extraction/detail-status" hx-trigger="every 2s" hx-swap="outerHTML"
+           class="flex items-center gap-2 text-sm text-sky-400 py-1">
+        <span class="animate-spin inline-block">&#9851;</span>
+        <span>Extracting documents...</span>
+      </div>
+      {% elif is_eval_pending %}
       <div hx-get="{{ prefix }}/candidates/{{ candidate.id }}/evaluation/status" hx-trigger="every 2s" hx-swap="outerHTML"
            class="flex items-center gap-2 text-sm text-yellow-400 py-1">
         <span class="animate-spin inline-block">&#9851;</span>
         <span>AI evaluation in progress...</span>
       </div>
-      {% elif not eval_up_to_date %}
+      {% elif has_docs and not eval_up_to_date %}
       <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/evaluate"
             hx-post="{{ prefix }}/candidates/{{ candidate.id }}/evaluate"
             hx-target="#eval-action-{{ candidate.id }}" hx-swap="outerHTML">
-        <button type="submit" class="text-sm bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">&#9654; Reevaluate</button>
+        <button type="submit" class="text-sm bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">
+          &#9654; {% if current_eval %}Reevaluate{% else %}Evaluate{% endif %}
+        </button>
       </form>
       {% endif %}
     </div>
   </div>
+
+  <!-- Status management -->
+  <section class="mb-6">
+    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Change Status</h3>
+    <div class="flex gap-2 flex-wrap">
+      {% for s in statuses %}
+      <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-post="{{ prefix }}/candidates/{{ candidate.id }}/status"
+            hx-target="#status-badge-{{ candidate.id }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(event.detail.successful) tdActivateStatusBtn('{{ s }}')">
+        <input type="hidden" name="status" value="{{ s }}" />
+        <button type="submit" data-status="{{ s }}" class="status-btn text-xs px-3 py-1.5 rounded-lg border transition-colors {% if candidate.status == s %}border-sky-500 bg-sky-900 text-sky-300{% else %}border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-500{% endif %}">
+          {{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(s, s) }}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+  </section>
 
   <!-- Candidate info -->
   <section class="mb-6">
@@ -101,7 +128,9 @@
         </div>
         <div class="flex items-center gap-3 flex-shrink-0 ml-3">
           <span class="text-xs text-gray-500">{{ doc.file_size_kb }} KB</span>
-          <a href="{{ prefix }}/documents/{{ doc.id }}/view" target="_blank" class="text-xs text-sky-400 hover:text-sky-300">View</a>
+          <button hx-get="{{ prefix }}/documents/{{ doc.id }}/modal"
+                  hx-target="#doc-modal" hx-swap="innerHTML"
+                  class="text-xs text-sky-400 hover:text-sky-300">View</button>
           <form method="post" action="{{ prefix }}/documents/{{ doc.id }}/delete"
                 hx-post="{{ prefix }}/documents/{{ doc.id }}/delete"
                 hx-target="closest div" hx-swap="outerHTML"
@@ -248,28 +277,9 @@
 
     {% else %}
     <div class="text-center py-8 text-gray-500">
-      <p class="text-sm">Candidate has not been evaluated yet. Upload documents and start evaluation.</p>
+      <p class="text-sm">{% if has_docs %}Documents uploaded — click Evaluate above to run AI analysis.{% else %}No documents uploaded yet. Add documents to enable evaluation.{% endif %}</p>
     </div>
     {% endif %}
-  </section>
-
-  <!-- Status management -->
-  <section class="pt-5 border-t border-gray-800 mb-4">
-    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Change Status</h3>
-    <div class="flex gap-2 flex-wrap">
-      {% for s in statuses %}
-      <form method="post" action="{{ prefix }}/candidates/{{ candidate.id }}/status"
-            hx-post="{{ prefix }}/candidates/{{ candidate.id }}/status"
-            hx-target="#status-badge-{{ candidate.id }}"
-            hx-swap="outerHTML"
-            hx-on::after-request="if(event.detail.successful) tdActivateStatusBtn('{{ s }}')">
-        <input type="hidden" name="status" value="{{ s }}" />
-        <button type="submit" data-status="{{ s }}" class="status-btn text-xs px-3 py-1.5 rounded-lg border transition-colors {% if candidate.status == s %}border-sky-500 bg-sky-900 text-sky-300{% else %}border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-500{% endif %}">
-          {{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(s, s) }}
-        </button>
-      </form>
-      {% endfor %}
-    </div>
   </section>
 
   <!-- Overrides -->
@@ -297,6 +307,10 @@
   {% endif %}
 
 </div>
+
+<!-- Document modal target -->
+<div id="doc-modal"></div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -402,5 +416,33 @@ function tdPiSave() {
     swap: 'none'
   });
 }
+
+// Load PDF into modal iframe as blob URL to avoid browser download dialog
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  var frame = document.getElementById('td-pdf-frame');
+  if (!frame) return;
+  var url = frame.dataset.src;
+  if (!url) return;
+  fetch(url, { credentials: 'same-origin' })
+    .then(function(r) { return r.blob(); })
+    .then(function(blob) { frame.src = URL.createObjectURL(blob); })
+    .catch(function() { frame.src = url; });
+});
+
+// Render markdown in doc modal
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  var el = document.getElementById('doc-modal-md');
+  if (!el || el.dataset.rendered) return;
+  el.dataset.rendered = '1';
+  var raw = el.closest('[data-md]') ? el.closest('[data-md]').dataset.md : null;
+  if (!raw) return;
+  if (window.marked) { el.innerHTML = marked.parse(raw); }
+  else {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+    s.onload = function() { el.innerHTML = marked.parse(raw); };
+    document.head.appendChild(s);
+  }
+});
 </script>
 {% endblock %}

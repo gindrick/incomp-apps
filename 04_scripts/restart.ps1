@@ -1,7 +1,7 @@
 # Zastaví všechny JJA služby a spustí je znovu přes start-all.ps1
 # Použití: cd c:/jja && ./04_scripts/restart.ps1
 
-$ports = @(8002, 4000, 8000, 8001, 8003, 8010, 5173)
+$ports = @(8002, 4000, 8000, 8443, 8001, 8003, 8010, 5173, 8016, 8017)
 $root  = "C:\jja"
 
 Write-Host ""

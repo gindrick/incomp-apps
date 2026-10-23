@@ -30,6 +30,7 @@ c:\jja\
 | Port | Service | Description |
 |------|---------|-------------|
 | **8000** | `03_router` | Entry point — all projects through this port |
+| **8443** | `03_router` | Same router over HTTPS (erp.hranipex.net certificate shared with Apache; firewall rule "Allow TCP 8443 Domain") |
 | 8001 | `react_assistant` | Web UI for AI agents |
 | 8002 | `01_mcp` | MCP server |
 | 8003 | `hr_demo` | HR demo dashboard |
@@ -38,6 +39,11 @@ c:\jja\
 | 5173 | `hr_hiring` frontend | React dev server |
 | 8011 | `production_cards` backend | Production Cards API |
 | 5174 | `production_cards` frontend | React dev server |
+| 8013 | `mkt_spotter` | Spotter web UI |
+| 9014 | `talentdesk` | TalentDesk — HR Recruitment |
+| 8015 | `feeder` | Feeder — XML Feed Downloader |
+| 8016 | `hrx_univerzity_v2` | HRX University — training portal (Node, MSSQL) |
+| 8017 | `semafor-provozu` | Semafor Provozu — operations project tracker (FastAPI, MSSQL) |
 
 ---
 
@@ -53,6 +59,11 @@ All via the router at `http://localhost:8000`:
 | `http://localhost:8000/hr_hiring_api` | HR Hiring (API) |
 | `http://localhost:8000/production_cards` | Production Cards (frontend) |
 | `http://localhost:8000/production_cards_api` | Production Cards (API) |
+| `http://localhost:8000/spotter` | Spotter — Competitor Monitor |
+| `http://localhost:8000/talentdesk` | TalentDesk — HR Recruitment |
+| `http://localhost:8000/feeder` | Feeder — XML Feed Downloader |
+| `http://localhost:8000/hrx_university` | HRX University — training portal |
+| `https://erp.hranipex.net:8443/semafor` | Semafor Provozu — operations project tracker (HTTPS only; :8000 redirects) |
 
 > `ollama_hrx` is not yet routed — it starts standalone.
 
@@ -230,3 +241,18 @@ Simple HR demo dashboard. FastAPI backend with a static frontend.
 
 ### ollama_hrx
 Standalone application built on Ollama local LLM. Has its own web UI and knowledge base. Not yet integrated into the router.
+
+### mkt_spotter
+Competitor social media monitor. Flask web UI (port 8013) with Playwright-based scrapers for LinkedIn and other platforms. Posts Teams notifications on successful runs.
+
+### talentdesk
+HR recruitment platform. FastAPI + Jinja2 monolith (port 9014) with LDAP authentication, MSSQL backend, and LLM-powered candidate evaluation. Accessible via `/talentdesk`.
+
+### hrx_univerzity_v2
+HRX University 2.0 — the sales-training portal (learner, admin, cleaner/adhesive comparisons), moved off Cloudflare Workers. The same Hono app runs on Node (port 8016, `apps/api/build/server-prod.mjs`) with MSSQL instead of D1, files under `data/` instead of R2 and e-mail via Microsoft Graph. Served under `/hrx_university` (router strips the prefix). Own `.env` (see `.env.example`); rebuild after changes with `npm run build:site && npm run build:server -w apps/api`. The original review package stays untouched in `hrx_univerzity/`. Full operating notes: [hrx_univerzity_v2/README.md](hrx_univerzity_v2/README.md).
+
+### semafor-provozu
+Semafor Provozu 3.0 — operations project and task tracker (project health, owners, deadlines, CEO overview, Gantt, charter PDF), moved off a Claude artifact. FastAPI (port 8017, `backend\.venv`) over MSSQL database `project-tracking-app`, served under `/semafor` (router strips the prefix). Sign-in via LDAP until the Entra ID values (`ENTRA_*` in the root `.env`) are filled in; roles are set in `semafor-provozu\.env` (`SEMAFOR_LDAP_ADMINS/USERS/READERS`). Full docs: [semafor-provozu/README.md](semafor-provozu/README.md).
+
+### feeder
+XML feed downloader. FastAPI + Jinja2 monolith (port 8015) with LDAP authentication. Simple web UI: enter a URL, validate availability, download and pretty-print the XML feed, then serve it as a file download. Accessible via `/feeder`.

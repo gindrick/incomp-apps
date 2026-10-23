@@ -23,7 +23,7 @@ def _deep_get(obj: Any, *keys: str) -> Any:
 
 
 def _extract_posts(responses: list[str]) -> list[dict]:
-    for text in responses:
+    for i, text in enumerate(responses):
         try:
             data = json.loads(text)
         except (json.JSONDecodeError, ValueError):
@@ -38,20 +38,41 @@ def _extract_posts(responses: list[str]) -> list[dict]:
         )
         if elements and isinstance(elements, list):
             posts = _parse_elements(elements)
+            logger.debug(
+                "response[%d]: top-level elements=%d → %d posts; first_urn=%s",
+                i, len(elements), len(posts),
+                elements[0].get("updateUrn") or elements[0].get("entityUrn") or "?" if elements else "?",
+            )
             if posts:
                 return posts
 
         # Nested: search one level deeper for any key containing "elements"
         if isinstance(data.get("data"), dict):
-            for v in data["data"].values():
+            for key, v in data["data"].items():
                 if isinstance(v, dict):
                     els = v.get("elements")
                     if els and isinstance(els, list):
                         posts = _parse_elements(els)
+                        logger.debug(
+                            "response[%d]: data.%s.elements=%d → %d posts; first_urn=%s",
+                            i, key, len(els), len(posts),
+                            els[0].get("updateUrn") or els[0].get("entityUrn") or "?" if els else "?",
+                        )
                         if posts:
                             return posts
 
     return []
+
+
+def _extract_activity_urn(raw: str) -> str:
+    """Return the simple urn:li:activity/ugcPost/share:NNN form, or '' if not a post URN.
+
+    Voyager often returns entityUrn as urn:li:fs_updateV2:(urn:li:activity:XXX,...).
+    Only the inner urn:li:activity/ugcPost/share:XXX part is valid for /feed/update/ URLs.
+    Non-post URNs (msg_conversation, fsd_profile, …) return '' so they produce no URL.
+    """
+    m = re.search(r"(urn:li:(?:activity|ugcPost|share):\d+)", raw)
+    return m.group(1) if m else ""
 
 
 def _parse_elements(elements: list) -> list[dict]:
@@ -80,16 +101,17 @@ def _parse_elements(elements: list) -> list[dict]:
         reactions = int(_deep_get(el, "reactionSummary", "count") or 0)
         comments = int(_deep_get(el, "commentSummary", "count") or 0)
 
-        # Post URN → URL
-        urn = (
+        # Post URN → URL: normalize to the simple urn:li:activity/ugcPost/share form
+        raw_urn = (
             el.get("updateUrn")
             or el.get("entityUrn")
             or _deep_get(el, "value", "com.linkedin.voyager.feed.render.UpdateV2", "updateMetadata", "updateUrn")
             or ""
         )
+        urn = _extract_activity_urn(raw_urn) if raw_urn else ""
         post_url = f"https://www.linkedin.com/feed/update/{urn}/" if urn else ""
 
-        if not text and not post_url:
+        if not text:
             continue
 
         posts.append({
@@ -269,7 +291,8 @@ class LinkedInScraper(ScraperBase):
 
         posts = []
         for el in containers[:15]:
-            urn = el.get("data-urn", "")
+            raw_urn = el.get("data-urn", "")
+            urn = _extract_activity_urn(raw_urn) if raw_urn else ""
             post_url = f"https://www.linkedin.com/feed/update/{urn}/" if urn else ""
 
             time_el = el.find("time")

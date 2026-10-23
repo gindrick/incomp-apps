@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth.dependencies import RedirectException
 from app.db.connection import Base, engine
-from app.routers import auth, candidates, documents, evaluations, job_descriptions, recruitments
+from app.routers import auth, candidates, departments, documents, evaluations, job_descriptions, recruitments
 from config import ROOT, settings
 
 
@@ -25,23 +25,26 @@ class _FaultTolerantRotatingHandler(logging.handlers.RotatingFileHandler):
 
 def _configure_logging() -> None:
     log_dir = ROOT / "logs"
-    log_dir.mkdir(exist_ok=True)
     fmt = logging.Formatter(
         "%(asctime)s.%(msecs)03d  %(levelname)-7s  %(name)s  %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    fh = _FaultTolerantRotatingHandler(
-        log_dir / "backend.out.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
-    )
-    fh.setFormatter(fmt)
-    fh.setLevel(logging.DEBUG)
     sh = logging.StreamHandler()
     sh.setFormatter(fmt)
     sh.setLevel(logging.INFO)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
-    root.addHandler(fh)
     root.addHandler(sh)
+    try:
+        log_dir.mkdir(exist_ok=True)
+        fh = _FaultTolerantRotatingHandler(
+            log_dir / "backend.out.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        fh.setFormatter(fmt)
+        fh.setLevel(logging.DEBUG)
+        root.addHandler(fh)
+    except PermissionError:
+        logging.getLogger(__name__).warning("Cannot write to logs/backend.out.log — file logging disabled")
     for noisy in ("httpx", "httpcore", "uvicorn.access", "litellm", "pdfminer", "openai", "charset_normalizer"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
@@ -81,6 +84,8 @@ def on_startup() -> None:
                 "ALTER TABLE candidate_evaluations ADD ai_red_flags NVARCHAR(MAX) NULL",
                 "ALTER TABLE candidate_evaluations ADD ai_current_role NVARCHAR(200) NULL",
                 "ALTER TABLE job_descriptions ADD requirements_json NVARCHAR(MAX) NULL",
+                "ALTER TABLE users ADD department_id INT NULL",
+                "ALTER TABLE job_descriptions ADD department_id INT NULL",
             ]:
                 try:
                     conn.execute(text(_col_sql))
@@ -100,6 +105,7 @@ def health() -> dict:
 
 
 app.include_router(auth.router)
+app.include_router(departments.router)
 app.include_router(job_descriptions.router)
 app.include_router(recruitments.router)
 app.include_router(candidates.router)

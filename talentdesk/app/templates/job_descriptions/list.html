@@ -1,33 +1,198 @@
 {% extends "base.html" %}
-{% block title %}Job Positions — TalentDesk{% endblock %}
+{% block title %}Positions — TalentDesk{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-8">
+
+{% if user.role == 'admin' %}
+{# ── Admin view ─────────────────────────────────────────────────────────── #}
+<div class="flex items-center justify-between mb-5">
   <h1 class="text-2xl font-bold text-white">Job Description Library</h1>
   <a href="{{ prefix }}/job-descriptions/new" class="bg-sky-500 hover:bg-sky-400 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">+ New Position</a>
 </div>
-{% if jds %}
-<div class="space-y-3">
-  {% for jd in jds %}
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-    <div class="flex items-start justify-between">
-      <div>
-        <h2 class="font-semibold text-white">{{ jd.title }}</h2>
-        <p class="text-sm text-gray-400 mt-0.5">{{ jd.department or 'No Department' }}</p>
-        {% if jd.salary_min or jd.salary_max %}
-        <p class="text-xs text-gray-500 mt-1">
-          Salary: {{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}
-        </p>
-        {% endif %}
-      </div>
-      <a href="{{ prefix }}/job-descriptions/{{ jd.id }}" class="text-sm text-sky-400 hover:text-sky-300">Edit</a>
+
+{# Filter / sort bar #}
+<form method="get" action="{{ prefix }}/job-descriptions" class="flex gap-3 mb-7" id="jd-filter-form">
+  <input type="text" name="q" value="{{ q }}"
+         oninput="clearTimeout(window._jdT); window._jdT = setTimeout(function(){ document.getElementById('jd-filter-form').submit(); }, 400)"
+         placeholder="Search positions…"
+         class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:border-sky-500 focus:outline-none text-sm" />
+  <select name="sort" onchange="document.getElementById('jd-filter-form').submit()"
+          class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-300 focus:border-sky-500 focus:outline-none text-sm cursor-pointer">
+    <option value="title_asc" {{ 'selected' if sort == 'title_asc' }}>Title A→Z</option>
+    <option value="title_desc" {{ 'selected' if sort == 'title_desc' }}>Title Z→A</option>
+    <option value="salary_asc" {{ 'selected' if sort == 'salary_asc' }}>Salary ↑</option>
+    <option value="salary_desc" {{ 'selected' if sort == 'salary_desc' }}>Salary ↓</option>
+  </select>
+  <button type="submit" class="bg-sky-500 hover:bg-sky-400 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0">Search</button>
+</form>
+
+{% if q %}
+{# ── Flat search results ─────────────────────────────────────────────── #}
+{% if search_results %}
+<p class="text-xs text-gray-500 mb-4">{{ search_results | length }} result{{ 's' if search_results | length != 1 }} for "<span class="text-gray-300">{{ q }}</span>"</p>
+<div class="space-y-2">
+  {% for jd in search_results %}
+  <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between">
+    <div>
+      <span class="font-medium text-white">{{ jd.title }}</span>
+      {% if jd.department_obj %}<span class="ml-2 text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{{ jd.department_obj.name }}</span>{% endif %}
+      {% if jd.salary_min or jd.salary_max %}
+      <span class="ml-3 text-xs text-gray-500">{{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}</span>
+      {% endif %}
     </div>
+    <a href="{{ prefix }}/job-descriptions/{{ jd.id }}" class="text-xs text-sky-400 hover:text-sky-300 ml-4 shrink-0">Edit</a>
   </div>
   {% endfor %}
 </div>
 {% else %}
-<div class="text-center py-16 text-gray-500">
-  <p>No positions yet.</p>
-  <a href="{{ prefix }}/job-descriptions/new" class="text-sky-400 hover:text-sky-300 mt-2 inline-block">Create first position →</a>
+<div class="text-center py-12 text-gray-500">
+  <p>No positions matching "<span class="text-gray-300">{{ q }}</span>".</p>
+  <p class="mt-2 text-sm"><a href="{{ prefix }}/job-descriptions" class="text-sky-400 hover:text-sky-300">Clear search</a></p>
 </div>
 {% endif %}
+
+{% else %}
+{# ── Hierarchy view ──────────────────────────────────────────────────── #}
+{% if not divisions and not unassigned %}
+<div class="text-center py-16 text-gray-500">
+  <p>No positions yet.</p>
+  <p class="mt-2 text-sm">First <a href="{{ prefix }}/departments" class="text-sky-400 hover:text-sky-300">set up departments</a>, then add positions.</p>
+</div>
+{% endif %}
+
+{% for division in divisions %}
+<div class="mb-8">
+  <div class="flex items-center gap-3 mb-3 pb-2 border-b border-gray-800">
+    <span class="text-xl">{{ division.icon or '🏢' }}</span>
+    <div>
+      <h2 class="text-lg font-bold text-white">{{ division.name }}</h2>
+      {% if division.head_name %}<p class="text-xs text-gray-500">{{ division.head_name }}{% if division.headcount %} · {{ division.headcount }} employees{% endif %}</p>{% endif %}
+    </div>
+  </div>
+
+  {% for child in division.children %}
+  {% set child_jds = jds_by_dept.get(child.id, []) %}
+  <div class="ml-4 mb-5">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-base">{{ child.icon or '📁' }}</span>
+      <h3 class="font-semibold text-gray-200">{{ child.name }}</h3>
+      {% if child.head_name %}<span class="text-xs text-gray-500">— {{ child.head_name }}{% if child.headcount %}, {{ child.headcount }} emp.{% endif %}</span>{% endif %}
+    </div>
+    {% if child_jds %}
+    <div class="ml-6 space-y-2">
+      {% for jd in child_jds %}
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between">
+        <div>
+          <span class="font-medium text-white">{{ jd.title }}</span>
+          {% if jd.salary_min or jd.salary_max %}
+          <span class="ml-3 text-xs text-gray-500">{{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}</span>
+          {% endif %}
+        </div>
+        <a href="{{ prefix }}/job-descriptions/{{ jd.id }}" class="text-xs text-sky-400 hover:text-sky-300 ml-4 shrink-0">Edit</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="ml-6 text-sm text-gray-600 italic">No positions defined</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# JDs assigned directly to the division (no sub-dept) #}
+  {% set div_jds = jds_by_dept.get(division.id, []) %}
+  {% if div_jds %}
+  <div class="ml-4 mb-3 space-y-2">
+    {% for jd in div_jds %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between">
+      <div>
+        <span class="font-medium text-white">{{ jd.title }}</span>
+        {% if jd.salary_min or jd.salary_max %}
+        <span class="ml-3 text-xs text-gray-500">{{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}</span>
+        {% endif %}
+      </div>
+      <a href="{{ prefix }}/job-descriptions/{{ jd.id }}" class="text-xs text-sky-400 hover:text-sky-300 ml-4 shrink-0">Edit</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if unassigned %}
+<div class="mb-8">
+  <div class="flex items-center gap-3 mb-3 pb-2 border-b border-gray-800">
+    <span class="text-xl">📋</span>
+    <h2 class="text-lg font-bold text-gray-400">Unassigned Positions</h2>
+  </div>
+  <div class="ml-4 space-y-2">
+    {% for jd in unassigned %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between">
+      <div>
+        <span class="font-medium text-white">{{ jd.title }}</span>
+        {% if jd.salary_min or jd.salary_max %}
+        <span class="ml-3 text-xs text-gray-500">{{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}</span>
+        {% endif %}
+      </div>
+      <a href="{{ prefix }}/job-descriptions/{{ jd.id }}" class="text-xs text-sky-400 hover:text-sky-300 ml-4 shrink-0">Edit</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}{# end if q / else hierarchy #}
+
+{% else %}
+{# ── Regular user: dept-scoped view ──────────────────────────────────────── #}
+{% if user_dept %}
+<div class="flex items-center gap-3 mb-5">
+  <span class="text-2xl">{{ user_dept.icon or '📁' }}</span>
+  <div>
+    <h1 class="text-2xl font-bold text-white">{{ user_dept.name }}</h1>
+    {% if user_dept.parent %}<p class="text-sm text-gray-500">{{ user_dept.parent.name }}</p>{% endif %}
+  </div>
+</div>
+
+{# Filter / sort bar for non-admin #}
+<form method="get" action="{{ prefix }}/job-descriptions" class="flex gap-3 mb-6" id="jd-filter-form-user">
+  <input type="text" name="q" value="{{ q }}"
+         oninput="clearTimeout(window._jdT); window._jdT = setTimeout(function(){ document.getElementById('jd-filter-form-user').submit(); }, 400)"
+         placeholder="Search positions…"
+         class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:border-sky-500 focus:outline-none text-sm" />
+  <select name="sort" onchange="document.getElementById('jd-filter-form-user').submit()"
+          class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-300 focus:border-sky-500 focus:outline-none text-sm cursor-pointer">
+    <option value="title_asc" {{ 'selected' if sort == 'title_asc' }}>Title A→Z</option>
+    <option value="title_desc" {{ 'selected' if sort == 'title_desc' }}>Title Z→A</option>
+    <option value="salary_asc" {{ 'selected' if sort == 'salary_asc' }}>Salary ↑</option>
+    <option value="salary_desc" {{ 'selected' if sort == 'salary_desc' }}>Salary ↓</option>
+  </select>
+  <button type="submit" class="bg-sky-500 hover:bg-sky-400 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shrink-0">Search</button>
+</form>
+
+{% if jds %}
+<div class="space-y-3">
+  {% for jd in jds %}
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <h2 class="font-semibold text-white">{{ jd.title }}</h2>
+    {% if jd.salary_min or jd.salary_max %}
+    <p class="text-xs text-gray-500 mt-1">Salary: {{ jd.salary_min | int if jd.salary_min else '?' }} – {{ jd.salary_max | int if jd.salary_max else '?' }} {{ jd.currency }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% elif q %}
+<div class="text-center py-12 text-gray-500">
+  <p>No positions matching "<span class="text-gray-300">{{ q }}</span>".</p>
+  <p class="mt-2 text-sm"><a href="{{ prefix }}/job-descriptions" class="text-sky-400 hover:text-sky-300">Clear search</a></p>
+</div>
+{% else %}
+<p class="text-gray-500 mt-4">No positions defined for this department yet.</p>
+{% endif %}
+
+{% else %}
+<div class="text-center py-16 text-gray-500">
+  <p>Your account is not assigned to any department.</p>
+  <p class="text-sm mt-2">Contact your administrator to set up access.</p>
+</div>
+{% endif %}
+{% endif %}
+
 {% endblock %}

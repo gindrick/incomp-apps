@@ -1,0 +1,61 @@
+/* Light mode overrides — applied when html.light-mode is set */
+
+html.light-mode body {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+/* Surface backgrounds */
+html.light-mode .bg-gray-950 { background-color: #f8fafc !important; }
+html.light-mode .bg-gray-900 { background-color: #ffffff !important; }
+html.light-mode .bg-gray-800 { background-color: #f1f5f9 !important; }
+html.light-mode .bg-gray-700 { background-color: #e2e8f0 !important; }
+
+/* Borders */
+html.light-mode .border-gray-800 { border-color: #e2e8f0 !important; }
+html.light-mode .border-gray-700 { border-color: #cbd5e1 !important; }
+html.light-mode .border-gray-600 { border-color: #94a3b8 !important; }
+
+/* Text */
+html.light-mode .text-white { color: #0f172a !important; }
+html.light-mode .text-gray-100 { color: #1e293b !important; }
+html.light-mode .text-gray-200 { color: #334155 !important; }
+html.light-mode .text-gray-300 { color: #475569 !important; }
+html.light-mode .text-gray-400 { color: #64748b !important; }
+html.light-mode .text-gray-500 { color: #94a3b8 !important; }
+html.light-mode .text-gray-600 { color: #cbd5e1 !important; }
+
+/* Hover text — nav links */
+html.light-mode .hover\:text-white:hover { color: #0f172a !important; }
+html.light-mode .hover\:text-gray-200:hover { color: #1e293b !important; }
+html.light-mode .hover\:text-gray-300:hover { color: #334155 !important; }
+
+/* Input placeholder */
+html.light-mode .placeholder-gray-500::placeholder { color: #94a3b8 !important; }
+
+/* Select element (special — color not a text class) */
+html.light-mode select { background-color: #f1f5f9 !important; color: #0f172a !important; }
+html.light-mode select option { background-color: #ffffff !important; color: #0f172a !important; }
+
+/* Admin role badge */
+html.light-mode .bg-sky-900 { background-color: #e0f2fe !important; }
+html.light-mode .text-sky-300 { color: #0369a1 !important; }
+
+/* Status badges — light-mode variants */
+html.light-mode .status-new      { background: #dbeafe; color: #1d4ed8; }
+html.light-mode .status-active   { background: #dcfce7; color: #15803d; }
+html.light-mode .status-interview{ background: #fef9c3; color: #a16207; }
+html.light-mode .status-offer    { background: #ede9fe; color: #7c3aed; }
+html.light-mode .status-hired    { background: #dcfce7; color: #166534; }
+html.light-mode .status-rejected { background: #fee2e2; color: #b91c1c; }
+
+/* Theme toggle icons */
+.theme-moon { display: none; }
+html.light-mode .theme-sun { display: none; }
+html.light-mode .theme-moon { display: block; }
+
+/* Focus ring — keep sky accent in both modes */
+html.light-mode .focus\:border-sky-500:focus { border-color: #0ea5e9 !important; }
+
+/* Dividers that use bg instead of border */
+html.light-mode .divide-gray-800 > * + * { border-color: #e2e8f0 !important; }

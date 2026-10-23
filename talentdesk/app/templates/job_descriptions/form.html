@@ -14,7 +14,14 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-300 mb-1">Department</label>
-        <input name="department" type="text" value="{% if jd %}{{ jd.department or '' }}{% endif %}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:border-sky-500 focus:outline-none" />
+        <select name="department_id" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:border-sky-500 focus:outline-none">
+          <option value="">— Unassigned —</option>
+          {% for dept in departments %}
+          <option value="{{ dept.id }}" {% if jd and jd.department_id == dept.id %}selected{% endif %}>
+            {% if dept.parent_id %}↳ {% endif %}{{ dept.icon or '' }} {{ dept.name }}{% if dept.parent %} ({{ dept.parent.name }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-300 mb-1">Currency</label>

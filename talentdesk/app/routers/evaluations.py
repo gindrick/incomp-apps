@@ -29,12 +29,17 @@ def trigger_evaluation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.routers.documents import _EXTRACT_STATUS
+
     candidate = _get_candidate_or_404(candidate_id, db)
     _check_access(candidate.recruitment_id, current_user, db)
 
+    if _EXTRACT_STATUS.get(candidate_id) == "pending":
+        return HTMLResponse('<div id="eval-action-' + str(candidate_id) + '" class="text-sm text-sky-400 py-1">Documents are still being extracted, please wait a moment...</div>')
+
     active_docs = [d for d in candidate.documents if not d.is_deleted and d.extracted_text]
     if not active_docs:
-        raise HTTPException(400, "No documents with extracted text available for evaluation")
+        return HTMLResponse('<div id="eval-action-' + str(candidate_id) + '" class="text-sm text-red-400 py-1">No documents with extracted text. Try uploading again.</div>')
 
     docs_hash = compute_documents_hash([d.sha256_hash for d in active_docs])
     current_eval = db.query(CandidateEvaluation).filter_by(candidate_id=candidate_id, is_current=True).first()

@@ -94,6 +94,14 @@ Start-Service-Background `
     -WorkDir "$root\03_router" `
     -Command "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8000"
 
+# Same router over HTTPS. Uses the erp.hranipex.net certificate (HranipexCA) shared with Apache;
+# Apache keeps 80/443. Firewall rule "Allow TCP 8443 Domain".
+$certDir = "C:\wamp64\bin\apache\apache2.4.51\conf\key"
+Start-Service-Background `
+    -Name "03-router-https" `
+    -WorkDir "$root\03_router" `
+    -Command "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8443 --ssl-certfile '$certDir\cert.crt' --ssl-keyfile '$certDir\decryptedPK.key'"
+
 # --- Projekty ---
 
 Start-Service-Background `
@@ -156,11 +164,42 @@ Start-Service-Background `
     -WorkDir "$root\talentdesk" `
     -Command "& '$root\talentdesk\.venv\Scripts\uvicorn.exe' main:app --host 0.0.0.0 --port 9014"
 
+Import-EnvFile "$root\feeder\.env" -Force
+
+# Kill any existing process holding port 8015 so restarts are idempotent
+$p8015 = (Get-NetTCPConnection -LocalPort 8015 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p8015) { Stop-Process -Id $p8015 -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
+
+Start-Service-Background `
+    -Name "feeder" `
+    -WorkDir "$root\feeder" `
+    -Command "uv run python -m uvicorn main:app --host 0.0.0.0 --port 8015"
+
+# --- HRX University (Node, MSSQL) — reads its own .env (hrx_univerzity_v2\.env) itself ---
+# Build after a code change: npm run build:site && npm run build:server -w apps/api
+$p8016 = (Get-NetTCPConnection -LocalPort 8016 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p8016) { Stop-Process -Id $p8016 -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
+
+Start-Service-Background `
+    -Name "hrx-university" `
+    -WorkDir "$root\hrx_univerzity_v2" `
+    -Command "node apps\api\build\server-prod.mjs"
+
+# --- Semafor Provozu (FastAPI, MSSQL) — reads semafor-provozu\.env (+ shared C:\jja\.env) itself ---
+$p8017 = (Get-NetTCPConnection -LocalPort 8017 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($p8017) { Stop-Process -Id $p8017 -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
+
+Start-Service-Background `
+    -Name "semafor" `
+    -WorkDir "$root\semafor-provozu" `
+    -Command "& '$root\semafor-provozu\backend\.venv\Scripts\python.exe' -m semafor serve --host 127.0.0.1 --port 8017"
+
 Write-Host ""
 Write-Host "Všechny služby spuštěny na pozadí (bez oken)."
 Write-Host ""
 Write-Host "Porty:"
 Write-Host "  8000 - Router (vstupní bod)"
+Write-Host "  8443 - Router HTTPS"
 Write-Host "  4000 - LiteLLM proxy"
 Write-Host "  8001 - react_assistant web UI"
 Write-Host "  8002 - MCP server"
@@ -173,5 +212,8 @@ Write-Host "  8012 - Production Cards 2 backend"
 Write-Host "  5175 - Production Cards 2 frontend (dev)"
 Write-Host "  8013 - Spotter web UI"
 Write-Host "  9014 - TalentDesk"
+Write-Host "  8015 - Feeder"
+Write-Host "  8016 - HRX University"
+Write-Host "  8017 - Semafor Provozu"
 Write-Host ""
 Write-Host "Logy: $logDir\"

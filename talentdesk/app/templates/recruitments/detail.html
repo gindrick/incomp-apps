@@ -120,23 +120,30 @@
   </div>
   {% else %}
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-colors cursor-pointer flex flex-col gap-3"
-       id="candidate-{{ c.id }}" onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'"
+       id="candidate-{{ c.id }}" onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'">
 
-    <!-- Header: recommendation badge + score -->
+    <!-- Header: recommendation badge + status + score -->
     <div class="flex items-center justify-between">
-      {% if current_eval and current_eval.ai_recommendation %}
-      {% set rec_label = {'DOPORUCIT': '★ Recommend', 'ZVAZIT': '~ Consider', 'NEDOPORUCIT': '✕ Not Suitable'} %}
-      <span class="text-xs font-bold px-2.5 py-1 rounded-full
-        {% if current_eval.ai_recommendation == 'DOPORUCIT' %}bg-green-900 text-green-300
-        {% elif current_eval.ai_recommendation == 'NEDOPORUCIT' %}bg-red-950 text-red-400
-        {% else %}bg-yellow-900 text-yellow-300{% endif %}">
-        {{ rec_label.get(current_eval.ai_recommendation, '—') }}
-      </span>
-      {% else %}
-      <span class="status-badge status-{{ c.status }}">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
-      {% endif %}
+      <div class="flex items-center gap-2 flex-wrap">
+        {% if current_eval and current_eval.ai_recommendation %}
+        {% set rec_label = {'DOPORUCIT': '★ Recommend', 'ZVAZIT': '~ Consider', 'NEDOPORUCIT': '✕ Not Suitable'} %}
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full
+          {% if current_eval.ai_recommendation == 'DOPORUCIT' %}bg-green-900 text-green-300
+          {% elif current_eval.ai_recommendation == 'NEDOPORUCIT' %}bg-red-950 text-red-400
+          {% else %}bg-yellow-900 text-yellow-300{% endif %}">
+          {{ rec_label.get(current_eval.ai_recommendation, '—') }}
+        </span>
+        {% endif %}
+        <span class="status-badge status-{{ c.status }}">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
+      </div>
       {% if current_eval %}
-      <span class="text-yellow-400 font-bold text-sm">{{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
+      <div class="flex flex-col items-end gap-0.5">
+        <span class="text-xs text-yellow-500 leading-none">AI {{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
+        {% set u_avg = user_skill_avgs.get(c.id) %}
+        {% if u_avg is not none %}
+        <span class="text-sm font-bold text-sky-400 leading-none">You {{ '%.1f' | format(u_avg) }}</span>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
 

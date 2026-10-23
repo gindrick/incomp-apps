@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
 
+from app.auth.dependencies import _sync_user
 from app.auth.ldap import AUTH_LOGGER, ldap_bind
+from app.db.connection import get_db
 from app.templates_config import templates
 from config import settings
 
@@ -28,10 +31,16 @@ def get_login(request: Request):
 
 
 @router.post("/login", include_in_schema=False)
-def post_login(request: Request, username: str = Form(...), password: str = Form(...)):
+def post_login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
     ip = _client_ip(request)
+    ok, groups = ldap_bind(username, password)
 
-    if not ldap_bind(username, password):
+    if not ok:
         AUTH_LOGGER.info("LOGIN_FAILED user=%s ip=%s", username.strip(), ip)
         return templates.TemplateResponse(
             request,
@@ -44,7 +53,8 @@ def post_login(request: Request, username: str = Form(...), password: str = Form
     email = norm if "@" in norm else f"{norm}@{settings.ldap_domain.lower()}"
     bare = norm.split("@")[0]
     request.session["user"] = {"name": bare, "email": email, "auth_provider": "ldap"}
-    AUTH_LOGGER.info("LOGIN_SUCCESS user=%s email=%s ip=%s", username.strip(), email, ip)
+    _sync_user(db, username=bare, email=email, groups=groups)
+    AUTH_LOGGER.info("LOGIN_SUCCESS user=%s email=%s groups=%s ip=%s", username.strip(), email, groups, ip)
     return RedirectResponse(url=f"{settings.proxy_prefix}/recruitments", status_code=302)
 
 

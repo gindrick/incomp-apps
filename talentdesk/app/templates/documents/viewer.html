@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ doc.original_name }} — TalentDesk</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% if doc.file_type == 'md' %}
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  {% endif %}
+  <style>
+    body { margin: 0; }
+    #pdf-frame { width: 100%; height: calc(100vh - 48px); border: none; display: block; }
+    #text-body { white-space: pre-wrap; word-break: break-word; }
+    #md-body img { max-width: 100%; }
+    #md-body h1,#md-body h2,#md-body h3 { font-weight: 700; margin-top: 1.25rem; margin-bottom: .5rem; color: #e5e7eb; }
+    #md-body p { margin-bottom: .75rem; color: #d1d5db; }
+    #md-body ul,#md-body ol { padding-left: 1.5rem; margin-bottom: .75rem; color: #d1d5db; }
+    #md-body li { margin-bottom: .25rem; }
+    #md-body code { background: #1f2937; padding: 2px 5px; border-radius: 4px; font-size: .85em; }
+    #md-body pre { background: #1f2937; padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: .75rem; }
+    #md-body pre code { background: none; padding: 0; }
+    #md-body a { color: #38bdf8; text-decoration: underline; }
+    #md-body blockquote { border-left: 3px solid #374151; padding-left: 1rem; color: #9ca3af; margin-bottom: .75rem; }
+  </style>
+</head>
+<body class="h-full bg-gray-950 text-gray-100 font-sans flex flex-col">
+
+  <!-- Header bar -->
+  <div class="flex items-center justify-between px-4 h-12 bg-gray-900 border-b border-gray-800 flex-shrink-0">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-xs font-semibold bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded uppercase flex-shrink-0">{{ doc.doc_type }}</span>
+      <span class="text-sm text-gray-200 truncate font-medium">{{ doc.original_name }}</span>
+      <span class="text-xs text-gray-500 flex-shrink-0">{{ doc.file_size_kb }} KB</span>
+    </div>
+    <div class="flex items-center gap-3 flex-shrink-0">
+      <a href="{{ raw_url }}" download="{{ doc.original_name }}"
+         class="text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded border border-gray-700 hover:border-gray-500">
+        Download
+      </a>
+      <button onclick="window.close()" class="text-gray-500 hover:text-red-400 text-xl leading-none transition-colors">&times;</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  {% if doc.file_type == 'pdf' %}
+  <iframe id="pdf-frame" src="{{ raw_url }}"></iframe>
+
+  {% elif doc.file_type in ('txt', 'md') and doc.extracted_text %}
+  <div class="flex-1 overflow-auto p-6">
+    {% if doc.file_type == 'md' %}
+    <div id="md-body" class="max-w-3xl mx-auto text-sm"></div>
+    <script>
+      const raw = {{ doc.extracted_text | tojson }};
+      document.getElementById('md-body').innerHTML = marked.parse(raw);
+    </script>
+    {% else %}
+    <pre id="text-body" class="max-w-3xl mx-auto text-sm text-gray-300 leading-relaxed">{{ doc.extracted_text }}</pre>
+    {% endif %}
+  </div>
+
+  {% elif doc.extracted_text %}
+  <div class="flex-1 overflow-auto p-6">
+    <pre id="text-body" class="max-w-3xl mx-auto text-sm text-gray-300 leading-relaxed">{{ doc.extracted_text }}</pre>
+  </div>
+
+  {% else %}
+  <div class="flex-1 flex flex-col items-center justify-center gap-4 text-gray-500">
+    <svg class="w-10 h-10 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    <p class="text-sm">Preview not available for this file type.</p>
+    <a href="{{ raw_url }}" download="{{ doc.original_name }}"
+       class="text-sm text-sky-400 hover:text-sky-300 px-4 py-2 rounded-lg border border-sky-900 hover:border-sky-700 transition-colors">
+      Download file
+    </a>
+  </div>
+  {% endif %}
+
+</body>
+</html>

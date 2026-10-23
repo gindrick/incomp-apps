@@ -58,5 +58,25 @@
     "target": "http://localhost:9014",
     "strip_prefix": true,
     "description": "TalentDesk — Recruitment & Candidate Evaluation"
+  },
+  {
+    "path": "feeder",
+    "target": "http://localhost:8015",
+    "strip_prefix": true,
+    "description": "Feeder — XML Feed Downloader"
+  },
+  {
+    "path": "hrx_university",
+    "target": "http://127.0.0.1:8016",
+    "strip_prefix": true,
+    "description": "HRX University — training portal (Node, MSSQL)"
+  },
+  {
+    "path": "semafor",
+    "target": "http://127.0.0.1:8017",
+    "strip_prefix": true,
+    "description": "Semafor Provozu — projekty a úkoly operations (MSSQL, LDAP)",
+    "stream": true,
+    "https_url": "https://erp.hranipex.net:8443"
   }
 ]

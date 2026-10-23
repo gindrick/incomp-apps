@@ -1,4 +1,4 @@
-# JJA Monitor – konfigurace notifikací
+# App Monitor – konfigurace notifikací
 # Vyplň TeamsWebhookUrl, pak spusť register-monitor-task.ps1
 
 # ── Teams Incoming Webhook ──────────────────────────────────────────────────

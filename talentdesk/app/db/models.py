@@ -18,6 +18,27 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.connection import Base
 
 
+class Department(Base):
+    __tablename__ = "departments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(10))
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("departments.id"))
+    head_name: Mapped[str | None] = mapped_column(String(100))
+    headcount: Mapped[int | None] = mapped_column(Integer)
+    description: Mapped[str | None] = mapped_column(String(500))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    ldap_group: Mapped[str | None] = mapped_column(String(200))
+
+    parent: Mapped[Department | None] = relationship(
+        "Department", back_populates="children", remote_side="Department.id"
+    )
+    children: Mapped[list[Department]] = relationship("Department", back_populates="parent")
+    job_descriptions: Mapped[list[JobDescription]] = relationship(back_populates="department_obj")
+    users: Mapped[list[User]] = relationship(back_populates="department")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -26,10 +47,12 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(200))
     email: Mapped[str | None] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    department_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("departments.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
+    department: Mapped[Department | None] = relationship("Department", back_populates="users")
     recruitments_created: Mapped[list[Recruitment]] = relationship(
         back_populates="creator", foreign_keys="Recruitment.created_by"
     )
@@ -48,11 +71,13 @@ class JobDescription(Base):
     salary_min: Mapped[float | None] = mapped_column(Numeric(10, 2))
     salary_max: Mapped[float | None] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(10), default="CZK")
+    department_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("departments.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     requirements_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
+    department_obj: Mapped[Department | None] = relationship("Department", back_populates="job_descriptions")
     recruitments: Mapped[list[Recruitment]] = relationship(back_populates="job_description")
 
 

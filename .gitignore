@@ -47,3 +47,6 @@ Thumbs.db
 /*.pdf
 /*.xlsx
 /*.csv
+
+# feeder: stažené XML feedy (běhová data)
+feeder/data/

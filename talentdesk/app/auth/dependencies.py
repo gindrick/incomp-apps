@@ -7,11 +7,17 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.connection import get_db
-from app.db.models import Candidate, RecruitmentAccess, User
+from app.db.models import Candidate, Department, RecruitmentAccess, User
 from config import settings
 
 
-def _sync_user(db: Session, username: str, email: str, default_role: str = "user") -> User:
+def _sync_user(
+    db: Session,
+    username: str,
+    email: str,
+    default_role: str = "user",
+    groups: list[str] | None = None,
+) -> User:
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         user = User(username=username, email=email, role=default_role, display_name=username)
@@ -19,6 +25,16 @@ def _sync_user(db: Session, username: str, email: str, default_role: str = "user
     else:
         user.email = email
     user.last_login = datetime.utcnow()
+
+    if groups is not None and user.role != "admin":
+        lower_groups = [g.lower() for g in groups]
+        depts = db.query(Department).filter(Department.ldap_group.isnot(None)).all()
+        matched = next(
+            (d for d in depts if d.ldap_group and d.ldap_group.lower() in lower_groups),
+            None,
+        )
+        user.department_id = matched.id if matched else None
+
     db.commit()
     db.refresh(user)
     return user

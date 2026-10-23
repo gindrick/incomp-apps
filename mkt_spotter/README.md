@@ -76,13 +76,61 @@ profiles:
 
 ## Running the scraper
 
+### Step 1 — Set up platform sessions (first time, or after a session expires)
+
+Platform sessions must be established manually before the scraper can run. Sessions are saved to `sessions/` and reused automatically on every subsequent run.
+
+```powershell
+uv run python setup_session.py
+```
+
+A browser window opens for each platform. Log in (including any 2FA prompts), confirm you can see your feed, then press **Enter** in the terminal to save the session. Repeat for each platform.
+
+To refresh only one platform (e.g. Facebook), answer `y` when prompted for that platform and `N` for the others.
+
+#### Session lifetime
+
+Sessions expire even without any error. When a session expires during a scheduled run, the scraper silently returns 0 posts — there is no automatic re-login.
+
+| Platform | Typical session lifetime | Notes |
+|---|---|---|
+| LinkedIn | **2–3 weeks** | Shortest — refresh proactively |
+| Facebook | 1–3 months | Logs "2FA re-verification" warning on expiry |
+| Instagram | 1–3 months | Expires silently (0 posts, no warning) |
+
+**Rule of thumb:** refresh sessions before each run if the last `setup_session.py` was more than 2 weeks ago. Check the file date:
+
+```powershell
+Get-Item C:\jja\mkt_spotter\sessions\*_state.json | Select-Object Name, LastWriteTime
+```
+
+If any file is older than 14 days, re-run `setup_session.py` for that platform before the next scrape:
+
+```powershell
+cd C:\jja\mkt_spotter
+uv run python setup_session.py
+```
+
+### Step 2 — Run the scraper
+
 ```powershell
 uv run python main.py
 ```
 
+**First run:** fetches posts from the last `days_back` days (default: 30, set in `config.yaml`).  
+**Subsequent runs:** automatically detects the previous report date and fetches only posts since then, avoiding duplicates.
+
 Results are saved to `reports/YYYY-MM-DD_HH-MM/`:
 - `data.json` — all collected data (used by the web UI)
 - `screenshots/` — PNG screenshots per post
+
+### Troubleshooting zero posts
+
+If a platform returns 0 posts with no error:
+1. Check the session file date — if older than 2 weeks, re-run `setup_session.py` for that platform (LinkedIn expires fastest).
+2. Check the log for "2FA re-verification" — re-run `setup_session.py` and re-login to Facebook.
+3. Set `headless: false` in `config.yaml` and re-run to watch the browser — look for a CAPTCHA or login wall.
+4. The session file in `sessions/<platform>_state.json` may be corrupt — delete it and re-run `setup_session.py`.
 
 ## Starting the web UI
 

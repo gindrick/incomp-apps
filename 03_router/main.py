@@ -9,6 +9,8 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
+UPSTREAM_TIMEOUT = httpx.Timeout(60.0)
+
 logger = logging.getLogger(__name__)
 
 ROUTER_ROOT = Path(__file__).resolve().parent
@@ -51,13 +53,11 @@ def _load_apps() -> list[dict]:
     return json.loads(text)
 
 
-def _find_target(path: str) -> tuple[str, str, bool] | None:
-    apps = _load_apps()
-    for entry in apps:
+def _find_entry(path: str) -> tuple[dict, str] | None:
+    for entry in _load_apps():
         prefix = "/" + entry["path"].strip("/")
         if path == prefix or path.startswith(prefix + "/"):
-            strip_prefix = bool(entry.get("strip_prefix", True))
-            return entry["target"].rstrip("/"), prefix, strip_prefix
+            return entry, prefix
     return None
 
 
@@ -91,7 +91,7 @@ def _rewrite_location_header(location: str, target: str, prefix: str, strip_pref
 )
 async def proxy(request: Request, full_path: str):
     path = "/" + full_path
-    result = _find_target(path)
+    result = _find_entry(path)
 
     if result is None:
         return Response(
@@ -104,7 +104,15 @@ async def proxy(request: Request, full_path: str):
             media_type="text/html",
         )
 
-    target, prefix, strip_prefix = result
+    entry, prefix = result
+    # An app served only over HTTPS: plain-HTTP requests (old :8000 links) are sent to its https_url.
+    https_url = entry.get("https_url")
+    if https_url and request.url.scheme == "http":
+        location = https_url.rstrip("/") + path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(url=location, status_code=307)
+
+    target = entry["target"].rstrip("/")
+    strip_prefix = bool(entry.get("strip_prefix", True))
     stripped_path = path[len(prefix):] or "/"
     forward_path = stripped_path if strip_prefix else path
     target_url = target + forward_path
@@ -113,18 +121,55 @@ async def proxy(request: Request, full_path: str):
 
     headers = dict(request.headers)
     headers.pop("host", None)
+    # The router is the edge: what the client claims about itself is replaced,
+    # never passed on, so an app can trust these for rate limits and links.
+    headers["x-forwarded-for"] = request.client.host if request.client else ""
+    headers["x-forwarded-proto"] = request.url.scheme
+    headers["x-forwarded-host"] = request.headers.get("host", "")
+    headers["x-forwarded-prefix"] = prefix
 
     body = await request.body()
 
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+    if entry.get("stream"):
+        return await _proxy_streaming(request.method, target_url, headers, body, target, prefix, strip_prefix)
+
+    async with httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT, follow_redirects=False) as client:
         response = await client.request(
             method=request.method,
             url=target_url,
             headers=headers,
             content=body,
         )
+    return _client_response(response, iter([response.content]), target, prefix, strip_prefix)
 
-    response_headers = dict(response.headers)
+
+async def _proxy_streaming(method: str, url: str, headers: dict, body: bytes,
+                           target: str, prefix: str, strip_prefix: bool) -> StreamingResponse:
+    """Pass the upstream body on as it arrives, so Server-Sent Events are not held back."""
+    client = httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT, follow_redirects=False)
+    try:
+        upstream = await client.send(client.build_request(method, url, headers=headers, content=body), stream=True)
+    except BaseException:
+        await client.aclose()
+        raise
+
+    async def chunks():
+        # Runs to the end also when the browser disconnects (the task is cancelled
+        # inside this loop), so the upstream connection never leaks.
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return _client_response(upstream, chunks(), target, prefix, strip_prefix)
+
+
+def _client_response(response: httpx.Response, content, target: str, prefix: str, strip_prefix: bool) -> StreamingResponse:
+    # Set-Cookie may repeat and must not be folded into one comma-joined header
+    # (a browser then reads only the first cookie); it is re-added one by one below.
+    response_headers = {k: v for k, v in response.headers.items() if k != "set-cookie"}
     response_headers.pop("transfer-encoding", None)
 
     if "location" in response_headers:
@@ -135,9 +180,12 @@ async def proxy(request: Request, full_path: str):
             strip_prefix,
         )
 
-    return StreamingResponse(
-        content=iter([response.content]),
+    proxied = StreamingResponse(
+        content=content,
         status_code=response.status_code,
         headers=response_headers,
         media_type=response.headers.get("content-type"),
     )
+    for cookie in response.headers.get_list("set-cookie"):
+        proxied.headers.append("set-cookie", cookie)
+    return proxied

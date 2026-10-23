@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VARIANTA B: IIS proces aplikace spouští a hlídá sám (HttpPlatformHandler 1.2), bez Windows služby.
+     Jednodušší správa, ale jen jeden proces a restart s recyklací poolu. Soubor přejmenovat na web.config.
+     Aplikační pool: No Managed Code; identita = účet s přístupem do SQL Serveru. -->
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="httpPlatformHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified" />
+    </handlers>
+    <httpPlatform processPath="C:\apps\semafor\venv\Scripts\python.exe"
+                  arguments="-m semafor serve --host 127.0.0.1 --port %HTTP_PLATFORM_PORT% --forwarded-allow-ips 127.0.0.1"
+                  startupTimeLimit="60" startupRetryCount="3" requestTimeout="00:11:00"
+                  stdoutLogEnabled="true" stdoutLogFile="C:\apps\semafor\logs\httpplatform">
+      <environmentVariables>
+        <environmentVariable name="SEMAFOR_ENV_FILE" value="C:\apps\semafor\.env" />
+        <environmentVariable name="PYTHONPATH" value="C:\apps\semafor\app\backend" />
+        <environmentVariable name="PYTHONUTF8" value="1" />
+      </environmentVariables>
+    </httpPlatform>
+    <urlCompression doStaticCompression="false" doDynamicCompression="false" />
+    <security>
+      <requestFiltering>
+        <requestLimits maxAllowedContentLength="22020096" />
+      </requestFiltering>
+    </security>
+  </system.webServer>
+</configuration>

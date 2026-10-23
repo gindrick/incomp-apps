@@ -121,6 +121,23 @@ def extraction_status(candidate_id: int, current_user: User = Depends(get_curren
     )
 
 
+@router.get("/{candidate_id}/extraction/detail-status")
+def extraction_detail_status(candidate_id: int, current_user: User = Depends(get_current_user)):
+    status = _EXTRACT_STATUS.get(candidate_id, "done")
+    pfx = settings.proxy_prefix
+    if status == "pending":
+        return HTMLResponse(
+            f'<div hx-get="{pfx}/candidates/{candidate_id}/extraction/detail-status"'
+            f' hx-trigger="every 2s" hx-swap="outerHTML"'
+            f' class="flex items-center gap-2 text-sm text-sky-400 py-1">'
+            f'<span class="animate-spin inline-block">&#9851;</span>'
+            f'<span>Extracting documents...</span>'
+            f'</div>'
+        )
+    _EXTRACT_STATUS.pop(candidate_id, None)
+    return HTMLResponse('<div><script>window.location.reload();</script></div>')
+
+
 @router.post("/{candidate_id}/status")
 def update_status(
     candidate_id: int,
@@ -137,7 +154,7 @@ def update_status(
     candidate.status = status
     db.commit()
     write_audit(db, current_user.id, "status_change", "candidate", candidate_id, f"{old_status}→{status}")
-    return HTMLResponse(f'<span class="status-badge status-{status}">{_status_label(status)}</span>', status_code=200)
+    return HTMLResponse(f'<span id="status-badge-{candidate_id}" class="status-badge status-{status}">{_status_label(status)}</span>', status_code=200)
 
 
 @router.post("/{candidate_id}/delete")
@@ -200,10 +217,12 @@ def _candidate_ctx(candidate_id: int, db: Session, current_user: User) -> dict:
         "overrides": overrides,
         "skill_ratings": skill_ratings,
         "docs": docs,
+        "has_docs": bool([d for d in candidate.documents if not d.is_deleted]),
         "user": current_user,
         "statuses": VALID_STATUSES,
         "eval_up_to_date": eval_up_to_date,
         "is_eval_pending": _EVAL_STATUS.get(candidate_id) == "pending",
+        "is_extract_pending": _EXTRACT_STATUS.get(candidate_id) == "pending",
         "skill_user_ratings": skill_user_ratings,
         "ai_skill_avg": ai_skill_avg,
         "user_skill_avg": user_skill_avg,

@@ -1,5 +1,5 @@
 {% set _rec = current_eval.ai_recommendation if current_eval else none %}
-{% set _pending = is_pending or (c.needs_reevaluation and not current_eval) %}
+{% set _pending = is_pending %}
 
 {% if _pending %}
 <div id="candidate-{{ c.id }}"
@@ -18,22 +18,25 @@
 {% elif current_eval %}
 <div id="candidate-{{ c.id }}"
      class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3 hover:border-gray-600 transition-colors cursor-pointer"
-     onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'"
+     onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'">
 
   <!-- Badge + score -->
   <div class="flex items-center justify-between">
-    <span class="text-xs font-bold px-2.5 py-1 rounded-full
-      {% if _rec == 'DOPORUCIT' %}bg-green-900 text-green-300
-      {% elif _rec == 'NEDOPORUCIT' %}bg-red-950 text-red-400
-      {% else %}bg-yellow-900 text-yellow-300{% endif %}">
-      {% if _rec == 'DOPORUCIT' %}★ Recommend
-      {% elif _rec == 'NEDOPORUCIT' %}✕ Not Suitable
-      {% else %}~ Consider{% endif %}
-    </span>
-    <div class="flex flex-col items-end">
-      <span class="text-xs text-yellow-500 leading-none">{{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs font-bold px-2.5 py-1 rounded-full
+        {% if _rec == 'DOPORUCIT' %}bg-green-900 text-green-300
+        {% elif _rec == 'NEDOPORUCIT' %}bg-red-950 text-red-400
+        {% else %}bg-yellow-900 text-yellow-300{% endif %}">
+        {% if _rec == 'DOPORUCIT' %}★ Recommend
+        {% elif _rec == 'NEDOPORUCIT' %}✕ Not Suitable
+        {% else %}~ Consider{% endif %}
+      </span>
+      <span class="status-badge status-{{ c.status }} text-xs">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
+    </div>
+    <div class="flex flex-col items-end gap-0.5">
+      <span class="text-xs text-yellow-500 leading-none">AI {{ '%.1f' | format(current_eval.ai_rating or 0) }}</span>
       {% if user_skill_avg is not none %}
-      <span class="text-base font-bold text-sky-400 leading-tight">{{ '%.1f' | format(user_skill_avg) }}</span>
+      <span class="text-sm font-bold text-sky-400 leading-none">You {{ '%.1f' | format(user_skill_avg) }}</span>
       {% endif %}
     </div>
   </div>
@@ -70,23 +73,25 @@
   {% endif %}
 
   <!-- Footer -->
-  <div class="flex items-center justify-between pt-1 border-t border-gray-800 mt-auto">
-    <span class="status-badge status-{{ c.status }} text-xs">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
-    {% if user.role == 'admin' %}
+  {% if user.role == 'admin' %}
+  <div class="flex items-center justify-end pt-1 border-t border-gray-800 mt-auto">
     <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/delete"
           onsubmit="event.stopPropagation(); return confirm('Delete candidate {{ c.last_name }} {{ c.first_name }}?')">
       <button type="submit" class="text-xs text-gray-600 hover:text-red-400 transition-colors">Delete</button>
     </form>
-    {% endif %}
   </div>
+  {% endif %}
 </div>
 
 {% else %}
 <div id="candidate-{{ c.id }}"
      class="bg-gray-900 border border-dashed border-gray-700 rounded-xl p-4 flex flex-col gap-2 hover:border-gray-500 transition-colors cursor-pointer"
-     onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'"
+     onclick="window.location.href='{{ prefix }}/candidates/{{ c.id }}'">
+  <div class="flex items-center justify-between">
+    <span class="status-badge status-{{ c.status }} text-xs">{{ {'new':'New','active':'In Process','interview':'Interview','offer':'Offer','hired':'Hired','rejected':'Rejected'}.get(c.status, c.status) }}</span>
+  </div>
   <p class="text-sm font-semibold text-white">{{ c.last_name or '—' }}{% if c.first_name %} {{ c.first_name }}{% endif %}{% if c.age %} <span class="text-gray-500 font-normal">({{ c.age }})</span>{% endif %}</p>
-  <p class="text-xs text-gray-600">No evaluation — upload documents in the detail view</p>
+  <p class="text-xs text-gray-600">No evaluation yet — open to evaluate</p>
   {% if user.role == 'admin' %}
   <form method="post" action="{{ prefix }}/candidates/{{ c.id }}/delete"
         onsubmit="event.stopPropagation(); return confirm('Delete candidate {{ c.last_name }} {{ c.first_name }}?')" class="mt-1">
